@@ -333,7 +333,7 @@ local function render_benchmark()
 	raster_setup()
 	raster_clear()
 
-	local count = 1000
+	local count = 10000
 
 	local t0 = os.clock()
 
