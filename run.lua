@@ -1,11 +1,15 @@
 local h3d   = require 'h3d'
 local bench = require '../eval/benchmark/generator/triangle_generator'
 
+-- vsl
+
+-- xyzw <-> rgba
+
 local raster = h3d.create_pipeline({
 	vertex_attributes = {
 --		{ name = 'Vertex', data = { 'x', 'y', 'z' } },
-		{ name = 'Uv',     data = { 'u', 'v' } },
-		{ name = 'Color',  data = { 'r', 'g', 'b'} },
+--		{ name = 'Uv',     data = { 'u', 'v' } },
+--		{ name = 'Color',  data = { 'r', 'g', 'b'} },
 --		{ name = 'Alpha',  data = { 'a' } },
 --		{ name = 'Normal', data = { 'nx', 'ny', 'nz' } },
 	},
@@ -84,7 +88,7 @@ end
 local C = 10
 
 local function draw_cube(x, y, z, rx, ry, rz, near, gr, cx, cy, cz)
-	raster.set_texture(TEX_BIG)
+	raster.set_texture(CC_FONT) -- TEX_BIG)
 
 	local s = -0.5
 	local e =  0.5
@@ -136,20 +140,20 @@ local function draw_cube(x, y, z, rx, ry, rz, near, gr, cx, cy, cz)
 		},
 	-- Top
 		top = {
-			--[[
 			vertex(xs, ys, zs,      0, 0, 0,    0.25 + m, 0.00 + m),
 			vertex(xe, ys, zs,      0, 0, 1,    0.50 - m, 0.00 + m),
 			vertex(xs, ys, ze,      1, 0, 0,    0.25 + m, 0.25 - m),
 			vertex(xe, ys, ze,      1, 1, 1,    0.50 - m, 0.25 - m),
 			vertex(xs, ys, ze,      1, 0, 0,    0.25 + m, 0.25 - m),
 			vertex(xe, ys, zs,      0, 0, 1,    0.50 - m, 0.00 + m),
-			]]
+			--[[
 			vertex(xs, ys, zs,      1, 0, 0,    0.25 + m, 0.00 + m),
 			vertex(xe, ys, zs,      0, 1, 0,    0.50 - m, 0.00 + m),
 			vertex(xs, ys, ze,      0, 0, 1,    0.25 + m, 0.25 - m),
 			vertex(xe, ys, ze,      1, 1, 0,    0.50 - m, 0.25 - m),
 			vertex(xs, ys, ze,      1, 0, 1,    0.25 + m, 0.25 - m),
 			vertex(xe, ys, zs,      0, 1, 1,    0.50 - m, 0.00 + m),
+			]]
 		},
 	-- Bottom
 		bottom = {
@@ -361,8 +365,8 @@ local function render_loop()
 
 		C = 1
 		local dz = (index - 500) / 10
-		for ix=1,10 do
-			for iz=1,10 do
+		for ix=1,1 do
+			for iz=1,1 do
 				draw_cube(ix - 5, 1, 2 + iz, p_rx, p_ry, p_rz, near, nil, p_x, p_y, p_z)
 			end
 		end
@@ -410,35 +414,30 @@ local function render_benchmark()
 	term.drawPixels(1, 1, 0, w, h)
 
 	local count = 100000
-
-	local str = ""
-	for i=0,255 do
-		local c = string.char(i)
-		if c == '\n' then
-			c = ' '
-		end
-
-		str = str .. c
-
-		if ((i + 1) % 16) == 0 then
-			str = str .. '\n'
-		end
-	end
-
-	os.sleep(3)
-	if true then
-		return
-	end
-
 	local t0 = os.clock()
 
 	math.randomseed(0)
 	local shapes = bench.generate(count, 500, 500, -250, -250)
-	local t1 = os.clock()
-	C = 1
+
 	local p1 = vertex(0, 0, 500)
 	local p2 = vertex(0, 0, 500)
 	local p3 = vertex(0, 0, 500)
+	for i, v in ipairs(shapes) do
+		if i > 1000 then
+			break
+		end
+		p1.x = v[1].x
+		p1.y = v[1].y
+		p2.x = v[2].x
+		p2.y = v[2].y
+		p3.x = v[3].x
+		p3.y = v[3].y
+		raster.renderTriangleCulling(p1, p2, p3, 0.01)
+	end
+	raster_clear()
+	
+	C = 1
+	local t1 = os.clock()
 	for i, v in ipairs(shapes) do
 		p1.x = v[1].x
 		p1.y = v[1].y
@@ -513,7 +512,7 @@ end
 
 -- render_benchmark
 -- Make sure we reset
-local _, err = xpcall(key_press, function(...)
+local _, err = xpcall(render_benchmark, function(...)
 	print(...)
 	print(debug.traceback())
 	term.setFrozen(false)

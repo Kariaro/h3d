@@ -40,9 +40,14 @@ function h3d_format.template(source, environment, callback)
 
 		table.insert(lines, '__insert(' .. quote(source:sub(1, s - 1)) .. ')')
 		if t == '%' then
-			table.insert(lines, (source:sub(s + 2, e - 1):gsub('@insert', '__insert')))
+			local content = (source:sub(s + 2, e - 1):gsub('@insert', '__insert'))
+			content = content:gsub('{#([a-zA-Z_]+)#}', 'table.concat(___%1, \'\')')
+
+			table.insert(lines, content)
 		elseif t == '!' then
-			table.insert(lines, '__insert(tostring(' .. source:sub(s + 2, e - 1) .. '))')
+			local content = source:sub(s + 2, e - 1)
+			content = content:gsub('{#([a-zA-Z_]+)#}', 'table.concat(___%1, \'\')')
+			table.insert(lines, '__insert(tostring(' .. content .. '))')
 		elseif t == '#' then
 			local name = source:sub(s + 2, e - 1)
 			if name:find('$[a-zA-Z0-9_-]+^') then

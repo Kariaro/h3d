@@ -7,7 +7,7 @@ function h3d.create_pipeline(data)
 	local FACE_ATTRIBUTES   = data.face_attributes
 	local FRAG_SHADER       = data.frag_shader
 
-	local h = fs.open(fs.combine(shell.dir(), 'h3d_raster.plua'), 'r')
+	local h = fs.open(fs.combine(shell.dir(), 'h3d_raster copy.plua'), 'r')
 	local content = h.readAll()
 	h.close()
 

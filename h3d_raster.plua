@@ -22,11 +22,11 @@ raster.DEPTHS = DEPTHS
 
 {%
 -- Should be env variables
-local USE_COLOR      = true
-local USE_DEPTH_LOW  = false
-local USE_DEPTH      = true
+local USE_COLOR      = false
+local USE_DEPTH_LOW  = true
+local USE_DEPTH      = false
 local USE_UV         = false
-local USE_FACE_CULL  = true
+local USE_FACE_CULL  = false
 
 
 local function get_lines(lines)
@@ -328,11 +328,10 @@ local function renderTriangleInternal(
 
 {! textindent(get_parameters(), 1) !}
 )
+{#full_function#}
 	TRIANGLES = TRIANGLES + 1
 {% if USE_DEPTH_LOW then %}
 	local depth = (
---		(x_min + x_mid + x_max) * (x_min + x_mid + x_max) +
---		(y_min + y_mid + y_max) * (y_min + y_mid + y_max) +
 		(x1 + x2 + x3) * (x1 + x2 + x3) +
 		(y1 + y2 + y3) * (y1 + y2 + y3) +
 		(z1 + z2 + z3) * (z1 + z2 + z3)
@@ -432,7 +431,6 @@ local function renderTriangleInternal(
 						cc = td[xc + yc * tw + 1]
 					end
 {% end %}
-					-- cc = _math_clamp(_math_floor(depth * 20), 0, 255)
 					PIXELS_Y[xx] = cc
 					RASTERED = RASTERED + 1
 {% if USE_DEPTH or USE_DEPTH_LOW then %}
@@ -460,6 +458,7 @@ local function renderTriangleInternal(
 {#triangle#}
 		end
 	end
+{#full_function#}
 end
 
 local function renderTriangle(
@@ -495,6 +494,18 @@ textindent(if_sorted({ 'sy1', 'sy2', 'sy3' }, function(state)
 		'if x_sta > x_end then',
 		'	x_sta, x_end = x_end, x_sta',
 		'end',
+		--[[textindent(
+			{#full_function#}
+				:gsub('y_min', 'sy{1}')
+				:gsub('y_mid', 'sy{2}')
+				:gsub('y_max', 'sy{3}')
+
+				:gsub('x_min', 'sx{1}')
+				:gsub('x_mid', 'sx{2}')
+				:gsub('x_max', 'sx{3}')
+
+				-- TODO do for all vertex attributes
+		, 0),]]
 		'renderTriangleInternal(',
 		'	sy{1}, sy{2}, sy{3},',
 		'	sx{1}, sx{2}, sx{3},',
