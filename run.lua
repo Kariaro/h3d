@@ -7,16 +7,16 @@ local bench = require '../eval/benchmark/generator/triangle_generator'
 
 local raster = h3d.create_pipeline({
 	vertex_attributes = {
---		{ name = 'Vertex', data = { 'x', 'y', 'z' } },
---		{ name = 'Uv',     data = { 'u', 'v' } },
---		{ name = 'Color',  data = { 'r', 'g', 'b'} },
---		{ name = 'Alpha',  data = { 'a' } },
---		{ name = 'Normal', data = { 'nx', 'ny', 'nz' } },
-	},
+		{ name = 'position', count = 3, position = true },
 
+--		{ name = 'uv',       count = 2 },
+--		{ name = 'color',    count = 3 },
+--		{ name = 'alpha',    count = 1 },
+--		{ name = 'normal',   count = 3 },
+	},
 	face_attributes = {
---		{ name = 'FaceId', data = { 'id' } },
---		{ name = 'Color',  data = { 'color' } },
+--		{ name = 'face_id',    count = 1 },
+--		{ name = 'face_color', count = 1 },
 	},
 	frag_shader = [[
 		local rgb = gl_tex(va_u, va_b, 0)
@@ -67,21 +67,21 @@ end
 
 local function vertex(x, y, z, r, g, b, u, v)
 	return {
-		x = x,
-		y = y,
-		z = z,
+		_position_x = x,
+		_position_y = y,
+		_position_z = z,
 
-		r = r or 0,
-		g = g or 0,
-		b = b or 0,
-		a = 0,
+		_color_x = r or 0,
+		_color_y = g or 0,
+		_color_z = b or 0,
+		_alpha_x = 0,
 
-		u = u or 0,
-		v = v or 0,
+		_uv_x = u or 0,
+		_uv_y = v or 0,
 
-		nx = 0,
-		ny = 0,
-		nz = 0,
+		_normal_x = 0,
+		_normal_y = 0,
+		_normal_z = 0,
 	}
 end
 
@@ -413,7 +413,7 @@ local function render_benchmark()
 	raster_clear()
 	term.drawPixels(1, 1, 0, w, h)
 
-	local count = 100000
+	local count = 10000
 	local t0 = os.clock()
 
 	math.randomseed(0)
@@ -426,25 +426,26 @@ local function render_benchmark()
 		if i > 1000 then
 			break
 		end
-		p1.x = v[1].x
-		p1.y = v[1].y
-		p2.x = v[2].x
-		p2.y = v[2].y
-		p3.x = v[3].x
-		p3.y = v[3].y
+		p1._position_x = v[1].x
+		p1._position_y = v[1].y
+		p2._position_x = v[2].x
+		p2._position_y = v[2].y
+		p3._position_x = v[3].x
+		p3._position_y = v[3].y
 		raster.renderTriangleCulling(p1, p2, p3, 0.01)
 	end
 	raster_clear()
-	
+	raster.get_rastered_info()
+
 	C = 1
 	local t1 = os.clock()
 	for i, v in ipairs(shapes) do
-		p1.x = v[1].x
-		p1.y = v[1].y
-		p2.x = v[2].x
-		p2.y = v[2].y
-		p3.x = v[3].x
-		p3.y = v[3].y
+		p1._position_x = v[1].x
+		p1._position_y = v[1].y
+		p2._position_x = v[2].x
+		p2._position_y = v[2].y
+		p3._position_x = v[3].x
+		p3._position_y = v[3].y
 		C = (i * 3 + C * 17 + 100) % 220
 
 		if i % 2000 == 0 then

@@ -23,10 +23,19 @@ raster.DEPTHS = DEPTHS
 {%
 -- Should be env variables
 local USE_COLOR      = false
-local USE_DEPTH_LOW  = true
 local USE_DEPTH      = false
 local USE_UV         = false
 local USE_FACE_CULL  = false
+
+-- Calculated
+local function get_attribute_name_raw(attribute)
+	return '_' .. attribute.name .. '_'
+end
+local function get_attribute_name(attribute, index)
+	return get_attribute_name_raw(attribute) .. ("xyzw"):sub(index, index)
+end
+
+local position_attr = get_attribute_name_raw(POSITION_ATTRIBUTE)
 
 
 local function get_lines(lines)
@@ -200,32 +209,44 @@ local function triangleCases(state)
 		return result:gsub('{t}', t)
 	end
 
-	local function delta_z(use_a, use_b, use_c)
-		return (use_a ~= nil and 'near' or 'z{1}') .. ', ' ..
-			   (use_b ~= nil and 'near' or 'z{2}') .. ', ' ..
-			   (use_c ~= nil and 'near' or 'z{3}')
+	local function delta_z(t, use_a, use_b, use_c)
+		local result =
+			(use_a ~= nil and 'near' or '{t}{1}') .. ', ' ..
+			(use_b ~= nil and 'near' or '{t}{2}') .. ', ' ..
+			(use_c ~= nil and 'near' or '{t}{3}')
+		return result:gsub('{t}', t)
 	end
 
 	local function get_variables(a, b, c)
-		local lines = {
-			'-- Vertex',
-			'  ' .. delta('x', a, b, c),
-			', ' .. delta('y', a, b, c),
-			', ' .. delta_z(a, b, c),
-		}
+		local lines = {}
 		for _,v in pairs(VERTEX_ATTRIBUTES) do
 			lines[#lines + 1] = '-- ' .. v.name
-			for _, e in pairs(v.data) do
-				lines[#lines + 1] = ', ' .. delta(e, a, b, c)
+			if v.position then
+				for index=1,v.count do
+					local element = get_attribute_name(v, index)
+
+					if index == 3 then
+						lines[#lines + 1] = ', ' .. delta_z(element, a, b, c)
+					else
+						lines[#lines + 1] = ', ' .. delta(element, a, b, c)
+					end
+				end
+			else
+				for index=1,v.count do
+					local element = get_attribute_name(v, index)
+					lines[#lines + 1] = ', ' .. delta(element, a, b, c)
+				end
 			end
 		end
 		for _,v in pairs(FACE_ATTRIBUTES) do
 			lines[#lines + 1] = '-- ' .. v.name
-			for _, e in pairs(v.data) do
-				lines[#lines + 1] = ', ' .. e
+			for index=1,v.count do
+				local element = get_attribute_name(v, index)
+				lines[#lines + 1] = ', ' .. element
 			end
 		end
-		return get_lines(lines)
+
+		return get_lines(lines):gsub('^(.-),( .*)', '%1 %2')
 	end
 
 	local inside = 0
@@ -254,16 +275,16 @@ local function triangleCases(state)
 	if inside == 1 then
 		out = get_lines({
 			'-- ' .. desc,
-			'local m{1}{2} = (near - z{2}) / (z{1} - z{2})',
-			'local m{1}{3} = (near - z{3}) / (z{1} - z{3})',
+			'local m{1}{2} = (near - {p}z{2}) / ({p}z{1} - {p}z{2})',
+			'local m{1}{3} = (near - {p}z{3}) / ({p}z{1} - {p}z{3})',
 			'renderTriangle(', textindent(get_variables(nil, 2, 3), 1), ')'
 		})
 		s_idx = i_idx
 	elseif inside == 2 then
 		out = get_lines({
 			'-- ' .. desc,
-			'local m{1}{2} = (near - z{2}) / (z{1} - z{2})',
-			'local m{1}{3} = (near - z{3}) / (z{1} - z{3})',
+			'local m{1}{2} = (near - {p}z{2}) / ({p}z{1} - {p}z{2})',
+			'local m{1}{3} = (near - {p}z{3}) / ({p}z{1} - {p}z{3})',
 			'renderTriangle(', textindent(get_variables(2, nil, nil), 1), ')',
 			'renderTriangle(', textindent(get_variables(3, 2, nil), 1), ')'
 		})
@@ -278,28 +299,26 @@ local function triangleCases(state)
 	return out:gsub('{1}', tostring(s_idx))
 			  :gsub('{2}', tostring(1 + (s_idx + 0) % 3))
 			  :gsub('{3}', tostring(1 + (s_idx + 1) % 3))
+			  :gsub('{p}', position_attr)
 end
 
 local function get_parameters_sort()
-	local lines = {
-		'-- Vertex',
-		'  x{1}, x{2}, x{3}', 
-		', y{1}, y{2}, y{3}',
-		', z{1}, z{2}, z{3}',
-	}
+	local lines = {}
 	for _,v in pairs(VERTEX_ATTRIBUTES) do
 		lines[#lines + 1] = '-- ' .. v.name
-		for _, e in pairs(v.data) do
-			lines[#lines + 1] = ', ' .. e .. '{1}, ' .. e .. '{2}, ' .. e .. '{3}'
+		for index=1,v.count do
+			local element = get_attribute_name(v, index)
+			lines[#lines + 1] = ', ' .. element .. '{1}, ' .. element .. '{2}, ' .. element .. '{3}'
 		end
 	end
 	for _,v in pairs(FACE_ATTRIBUTES) do
 		lines[#lines + 1] = '-- ' .. v.name
-		for _, e in pairs(v.data) do
-			lines[#lines + 1] = ', ' .. e
+		for index=1,v.count do
+			local element = get_attribute_name(v, index)
+			lines[#lines + 1] = ', ' .. element
 		end
 	end
-	return table.concat(lines, '\n')
+	return table.concat(lines, '\n'):gsub('^(.-),( .*)', '%1 %2')
 end
 
 local function get_parameters()
@@ -330,28 +349,25 @@ local function renderTriangleInternal(
 )
 {#full_function#}
 	TRIANGLES = TRIANGLES + 1
-{% if USE_DEPTH_LOW then %}
-	local depth = (
-		(x1 + x2 + x3) * (x1 + x2 + x3) +
-		(y1 + y2 + y3) * (y1 + y2 + y3) +
-		(z1 + z2 + z3) * (z1 + z2 + z3)
-	) / 4
-{% end %}
-{% if USE_DEPTH or USE_COLOR or USE_UV or #VERTEX_ATTRIBUTES > 0 then %}
-	z1 = 1 / z1
-	z2 = 1 / z2
-	z3 = 1 / z3
-{% end %}
 {%
 	-- Apply perspective correction on vertex attributes
-	for _, v in pairs(VERTEX_ATTRIBUTES) do
-		@insert('\t-- ' .. v.name .. '\n')
+	if POSITION_ATTRIBUTE.count > 2 and #VERTEX_ATTRIBUTES > 1 then
 		for i=1,3 do
-			for _, element in pairs(v.data) do
-				@insert('\t' .. element .. i .. ' = ' .. element .. i .. ' * z' .. i .. '\n')
-			end
+			@insert('\t' .. position_attr .. 'z' .. i .. ' = 1 / ' .. position_attr .. 'z' .. i .. '\n')
 		end
-		@insert('\n')
+		
+		for _, v in pairs(VERTEX_ATTRIBUTES) do
+			if not v.position then
+				@insert('\t-- ' .. v.name .. '\n')
+				for i=1,3 do
+					for index=1,v.count do
+						local element = get_attribute_name(v, index)
+						@insert('\t' .. element .. i .. ' = ' .. element .. i .. ' * ' .. position_attr .. 'z' .. i .. '\n')
+					end
+				end
+			end
+			@insert('\n')
+		end
 	end
 %}
 {% if USE_DEPTH or USE_COLOR or USE_UV then %}
@@ -386,7 +402,7 @@ local function renderTriangleInternal(
 
 {#triangle#}
 			local PIXELS_Y = PIXELS[yb]
-{% if USE_DEPTH or USE_DEPTH_LOW then %}
+{% if USE_DEPTH then %}
 			local DEPTHS_Y = DEPTHS[yb]
 {% end %}
 
@@ -405,9 +421,9 @@ local function renderTriangleInternal(
 				local c_z = (yyy * czx - xxx * czy) * det
 				local c_x = 1.0 - c_y - c_z
 
-				local depth = 1 / (z1 * c_x + z2 * c_y + z3 * c_z)
+				local depth = 1 / ({!position_attr!}z1 * c_x + {!position_attr!}z2 * c_y + {!position_attr!}z3 * c_z)
 {% end %}
-{% if USE_DEPTH or USE_DEPTH_LOW then %}
+{% if USE_DEPTH then %}
 				if DEPTHS_Y[xx] > depth then
 					DEPTHS_Y[xx] = depth
 {% end %}
@@ -433,7 +449,7 @@ local function renderTriangleInternal(
 {% end %}
 					PIXELS_Y[xx] = cc
 					RASTERED = RASTERED + 1
-{% if USE_DEPTH or USE_DEPTH_LOW then %}
+{% if USE_DEPTH then %}
 				end
 {% end %}
 			end
@@ -466,12 +482,12 @@ local function renderTriangle(
 )
 	local A = W / 2.0
 	local B = H / 2.0
-	local sx1 = A + (x1 * H) / z1
-	local sx2 = A + (x2 * H) / z2
-	local sx3 = A + (x3 * H) / z3
-	local sy1 = B + (y1 * H) / z1
-	local sy2 = B + (y2 * H) / z2
-	local sy3 = B + (y3 * H) / z3
+	local sx1 = A + ({!position_attr!}x1 * H) / {!position_attr!}z1
+	local sx2 = A + ({!position_attr!}x2 * H) / {!position_attr!}z2
+	local sx3 = A + ({!position_attr!}x3 * H) / {!position_attr!}z3
+	local sy1 = B + ({!position_attr!}y1 * H) / {!position_attr!}z1
+	local sy2 = B + ({!position_attr!}y2 * H) / {!position_attr!}z2
+	local sy3 = B + ({!position_attr!}y3 * H) / {!position_attr!}z3
 {% if USE_FACE_CULL then %}
 	if ((sx2 - sx1) * (sy3 - sy1) - (sx3 - sx1) * (sy2 - sy1)) < 0 then
 		return
@@ -523,15 +539,11 @@ end), 1)
 end
 
 function raster.renderTriangleCulling(_p1, _p2, _p3, near)
-	-- Vertex
-	local x1, x2, x3 = _p1.x, _p2.x, _p3.x
-	local y1, y2, y3 = _p1.y, _p2.y, _p3.y
-	local z1, z2, z3 = _p1.z, _p2.z, _p3.z
-
 {%
 	for _, v in pairs(VERTEX_ATTRIBUTES) do
 		@insert('\t-- ' .. v.name .. '\n')
-		for _, element in pairs(v.data) do
+		for index=1,v.count do
+			local element = get_attribute_name(v, index)
 			local pattern = '\tlocal {t}1, {t}2, {t}3 = _p1.{t}, _p2.{t}, _p3.{t}\n'
 			@insert(pattern:gsub('{t}', element))
 		end
@@ -540,14 +552,15 @@ function raster.renderTriangleCulling(_p1, _p2, _p3, near)
 
 	for _, v in pairs(FACE_ATTRIBUTES) do
 		@insert('\t-- ' .. v.name .. '\n')
-		for _, element in pairs(v.data) do
+		for index=1,v.count do
+			local element = get_attribute_name(v, index)
 			@insert('\tlocal ' .. element .. ' = _p1.' .. element .. '\n')
 		end
 		@insert('\n')
 	end
 %}
 {!
-	textindent(if_greater({ 'z1', 'z2', 'z3' }, 'near', triangleCases), 1)
+	textindent(if_greater({ position_attr .. 'z1', position_attr .. 'z2', position_attr .. 'z3' }, 'near', triangleCases), 1)
 !}
 end
 
