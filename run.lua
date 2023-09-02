@@ -5,7 +5,7 @@ local bench = require '../eval/benchmark/generator/triangle_generator'
 
 -- xyzw <-> rgba
 
-local raster = h3d.create_pipeline({
+local raster, geometry = h3d.create_pipeline({
 	vertex_attributes = {
 		{ name = 'position', count = 3, position = true },
 
@@ -15,8 +15,8 @@ local raster = h3d.create_pipeline({
 --		{ name = 'normal',   count = 3 },
 	},
 	face_attributes = {
---		{ name = 'face_id',    count = 1 },
---		{ name = 'face_color', count = 1 },
+		{ name = 'face_id',    count = 1 },
+		{ name = 'C', count = 1 },
 	},
 	frag_shader = [[
 		local rgb = gl_tex(va_u, va_b, 0)
@@ -413,59 +413,58 @@ local function render_benchmark()
 	raster_clear()
 	term.drawPixels(1, 1, 0, w, h)
 
-	local count = 10000
+	local count = 100000
 	local t0 = os.clock()
 
 	math.randomseed(0)
 	local shapes = bench.generate(count, 500, 500, -250, -250)
 
-	local p1 = vertex(0, 0, 500)
-	local p2 = vertex(0, 0, 500)
-	local p3 = vertex(0, 0, 500)
 	for i, v in ipairs(shapes) do
-		if i > 1000 then
+		if i > 0 then
 			break
 		end
-		p1._position_x = v[1].x
-		p1._position_y = v[1].y
-		p2._position_x = v[2].x
-		p2._position_y = v[2].y
-		p3._position_x = v[3].x
-		p3._position_y = v[3].y
-		raster.renderTriangleCulling(p1, p2, p3, 0.01)
+
+		local buffer = geometry
+			.vertex('position', v[1].x, v[1].y, 500)
+			.vertex('position', v[2].x, v[2].y, 500)
+			.vertex('position', v[3].x, v[3].y, 500)
+			.build()
+
+		raster.renderTriangleCulling(buffer, 0.01)
 	end
 	raster_clear()
 	raster.get_rastered_info()
 
-	C = 1
 	local t1 = os.clock()
+	C = 1
 	for i, v in ipairs(shapes) do
-		p1._position_x = v[1].x
-		p1._position_y = v[1].y
-		p2._position_x = v[2].x
-		p2._position_y = v[2].y
-		p3._position_x = v[3].x
-		p3._position_y = v[3].y
 		C = (i * 3 + C * 17 + 100) % 220
+		geometry
+			.vertex('position', v[1].x, v[1].y, 500)
+			.vertex('position', v[2].x, v[2].y, 500)
+			.vertex('position', v[3].x, v[3].y, 500)
+			.face('C', C)
 
 		if i % 2000 == 0 then
 			os.sleep(0)
 		end
-
-		raster.set_color(C)
-		raster.renderTriangleCulling(p1, p2, p3, 0.01)
 	end
+	local t2 = os.clock()
+
+	raster.renderTriangleCulling(geometry.build(), 0.01)
 
 	local r_pixels, _ = raster.get_rastered_info()
 	print('pixels ' .. r_pixels)
 	term.drawPixels(1, 1, raster.PIXELS)
-	local t2 = os.clock()
-	os.sleep(4)
+	local t3 = os.clock()
+	os.sleep(1)
 
 	local gen_t = t1 - t0
-	local dra_t = t2 - t1
+	local geo_t = t2 - t1
+	local dra_t = t3 - t2
 	print('shapes     ' .. #shapes)
 	print('generating ' .. (gen_t * 1000) .. ' ms')
+	print('geometry   ' .. (geo_t * 1000) .. ' ms')
 	print('drawing    ' .. (dra_t * 1000) .. ' ms, (' .. ((dra_t * 1000) / #shapes) .. ' ms average)')
 end
 

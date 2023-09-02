@@ -29,9 +29,12 @@ local USE_FACE_CULL  = false
 
 -- Calculated
 local function get_attribute_name_raw(attribute)
-	return '_' .. attribute.name .. '_'
+	return attribute.name .. '_'
 end
 local function get_attribute_name(attribute, index)
+	if attribute.count == 1 then
+		return attribute.name
+	end
 	return get_attribute_name_raw(attribute) .. ("xyzw"):sub(index, index)
 end
 
@@ -538,30 +541,50 @@ end), 1)
 !}
 end
 
-function raster.renderTriangleCulling(_p1, _p2, _p3, near)
+function raster.renderTriangleCulling(geometry, near)
 {%
+	local face_size = 0
 	for _, v in pairs(VERTEX_ATTRIBUTES) do
-		@insert('\t-- ' .. v.name .. '\n')
-		for index=1,v.count do
-			local element = get_attribute_name(v, index)
-			local pattern = '\tlocal {t}1, {t}2, {t}3 = _p1.{t}, _p2.{t}, _p3.{t}\n'
-			@insert(pattern:gsub('{t}', element))
-		end
-		@insert('\n')
+		face_size = face_size + v.count * 3
 	end
-
 	for _, v in pairs(FACE_ATTRIBUTES) do
-		@insert('\t-- ' .. v.name .. '\n')
-		for index=1,v.count do
-			local element = get_attribute_name(v, index)
-			@insert('\tlocal ' .. element .. ' = _p1.' .. element .. '\n')
-		end
-		@insert('\n')
+		face_size = face_size + v.count
 	end
 %}
+	for i=1,#geometry,{!face_size!} do
+{%
+		local idx = 0
+		for _, v in pairs(VERTEX_ATTRIBUTES) do
+			@insert('\t\t-- ' .. v.name .. '\n')
+			for i=1,3 do
+				for index=1,v.count do
+					local element = get_attribute_name(v, index)
+					local pattern = '\t\tlocal {t}{1} = geometry[i + ' .. (idx) .. ']\n'
+					@insert(pattern:gsub('{t}', element):gsub('{1}', i))
+					idx = idx + 1
+				end
+			end
+			@insert('\n')
+		end
+
+		for _, v in pairs(FACE_ATTRIBUTES) do
+			@insert('\t\t-- ' .. v.name .. '\n')
+			for index=1,v.count do
+				local element = get_attribute_name(v, index)
+				@insert('\t\tlocal ' .. element .. ' = geometry[i + ' .. idx .. ']' .. '\n')
+				idx = idx + 1
+			end
+			@insert('\n')
+		end
+%}
+		-- print()
+		-- print({!position_attr!}x1, {!position_attr!}x2, {!position_attr!}x3)
+		-- print({!position_attr!}y1, {!position_attr!}y2, {!position_attr!}y3)
+		-- print({!position_attr!}z1, {!position_attr!}z2, {!position_attr!}z3)
 {!
-	textindent(if_greater({ position_attr .. 'z1', position_attr .. 'z2', position_attr .. 'z3' }, 'near', triangleCases), 1)
+		textindent(if_greater({ position_attr .. 'z1', position_attr .. 'z2', position_attr .. 'z3' }, 'near', triangleCases), 2)
 !}
+	end
 end
 
 local function rgb(r, g, b)

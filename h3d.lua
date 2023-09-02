@@ -40,7 +40,106 @@ function h3d.create_pipeline(data)
 		h.close()
 	end)
 
-	return result
+	return result, h3d.geometry(VERTEX_ATTRIBUTES, FACE_ATTRIBUTES)
+end
+
+function h3d.geometry(VERTEX_ATTRIBUTES, FACE_ATTRIBUTES)
+	local M = {}
+	M.data = {}
+	M.va_count = {}
+	M.fa_count = {}
+
+	local va_attributes = {}
+	local fa_attributes = {}
+	local face_size = 0
+	for _, v in pairs(VERTEX_ATTRIBUTES) do
+		va_attributes[v.name] = {
+			count = v.count * 3,
+			index = face_size
+		}
+		face_size = face_size + v.count * 3
+	end
+	for _, v in pairs(FACE_ATTRIBUTES) do
+		fa_attributes[v.name] = {
+			count = v.count,
+			index = face_size
+		}
+		face_size = face_size + v.count
+	end
+
+	for name, _ in pairs(va_attributes) do
+		M.va_count[name] = 0
+	end
+	for name, _ in pairs(fa_attributes) do
+		M.fa_count[name] = 0
+	end
+
+	function M.vertex(name, ...)
+		local attribute = va_attributes[name]
+		if attribute == nil then
+			return M
+		end
+
+		local vd = {...}
+		local vi = attribute.index
+		local vc = attribute.count
+
+		-- print('Adding "va_' .. name .. '" [' .. textutils.serialize({...}, { compact=true }) .. ']')
+		local count = M.va_count[name]
+		for i=1,#vd do
+			local step = math.floor(count / vc)
+			local rest = count - step * vc
+			local idx = step * face_size + vi + 1 + rest
+			M.data[idx] = vd[i]
+			count = count + 1
+		end
+		M.va_count[name] = count
+		return M
+	end
+
+	function M.face(name, ...)
+		local attribute = fa_attributes[name]
+		if attribute == nil then
+			return M
+		end
+
+		local vd = {...}
+		local vi = attribute.index
+		local vc = attribute.count
+
+		-- print('Adding "fa_' .. name .. '" [' .. textutils.serialize({...}, { compact=true }) .. ']')
+		local count = M.fa_count[name]
+		for i=1,#vd do
+			local step = math.floor(count / vc)
+			local rest = count - step * vc
+			local idx = step * face_size + vi + 1 + rest
+			M.data[idx] = vd[i]
+			count = count + 1
+		end
+		M.fa_count[name] = count
+		return M
+	end
+
+	function M.build()
+		local triangles = 0
+		for name, value in pairs(va_attributes) do
+			triangles = math.max(triangles, math.floor(M.va_count[name] / value.count))
+			M.va_count[name] = 0
+		end
+		for name, value in pairs(fa_attributes) do
+			triangles = math.max(triangles, math.floor(M.fa_count[name] / value.count))
+			M.fa_count[name] = 0
+		end
+
+		local data = M.data
+		for i=1,triangles * face_size do
+			if data[i] == nil then
+				data[i] = 0
+			end
+		end
+		return data
+	end
+	return M
 end
 
 function h3d.load_image(name)
