@@ -9,6 +9,21 @@ local raster = {}
 -- Globals
 local PIXELS = {}
 local DEPTHS = {}
+{%
+for _, name in pairs(LAYERS) do
+	@insert('local layer_' .. name .. ' = {}\n')
+	@insert('raster.layer_' .. name .. ' = layer_' .. name .. '\n')
+end
+%}
+
+local layers = {
+{%
+for _, name in pairs(LAYERS) do
+	@insert('\t' .. name .. ' = layer_' .. name .. ',\n')
+end
+%}
+}
+
 local RASTERED = 0
 local TRIANGLES = 0
 local TEXTURE = nil
@@ -19,21 +34,18 @@ local C = 1
 raster.PIXELS = PIXELS
 raster.DEPTHS = DEPTHS
 
-
 {%
 -- Should be env variables
-local USE_COLOR      = false
-local USE_DEPTH      = false
-local USE_UV         = false
+local USE_UV         = true
 local USE_FACE_CULL  = false
 
 -- Calculated
 local function get_attribute_name_raw(attribute)
-	return attribute.name .. '_'
+	return '_' .. attribute.name .. '_'
 end
 local function get_attribute_name(attribute, index)
 	if attribute.count == 1 then
-		return attribute.name
+		return '_' .. attribute.name
 	end
 	return get_attribute_name_raw(attribute) .. ("xyzw"):sub(index, index)
 end
@@ -373,19 +385,17 @@ local function renderTriangleInternal(
 		end
 	end
 %}
-{% if USE_DEPTH or USE_COLOR or USE_UV then %}
 	-- Barycentric calculations
 	local cyx = x_max - x_min
 	local cyy = y_max - y_min
 	local czx = x_mid - x_min
 	local czy = y_mid - y_min
 	local det = 1 / (czx * cyy - cyx * czy)
-{% end %}
-{% if USE_UV then %}
+
 	local tw = TEXTURE and TEXTURE.w
 	local th = TEXTURE and TEXTURE.h
 	local td = TEXTURE and TEXTURE.data
-{% end %}
+
 	local y_d0 = y_mid - y_max
 	local y_d1 = y_min - y_mid
 
@@ -405,54 +415,28 @@ local function renderTriangleInternal(
 
 {#triangle#}
 			local PIXELS_Y = PIXELS[yb]
-{% if USE_DEPTH then %}
-			local DEPTHS_Y = DEPTHS[yb]
-{% end %}
+{%
+			for _, name in pairs(LAYERS) do
+				@insert('\t\t\tlocal layer_' .. name .. '_y = layer_' .. name .. '[yb]\n')
+			end
+%}
 
-{% if USE_DEPTH or USE_COLOR or USE_UV then %}
 			local yyy = yb - y_min + 0.5
-{% end %}
 			xs = _math_max(xs, 1)
 			xe = _math_min(xe, W)
 			xs = _math_ceil(xs - 0.5)
 			xe = _math_ceil(xe - 0.5) - 1
 
 			for xx=xs,xe do
-{% if USE_DEPTH or USE_COLOR or USE_UV then %}
-				local xxx = xx - x_min + 0.5
-				local c_y = (xxx * cyy - yyy * cyx) * det
-				local c_z = (yyy * czx - xxx * czy) * det
-				local c_x = 1.0 - c_y - c_z
+{! textindent(FRAG_SHADER, 4) !}
 
-				local depth = 1 / ({!position_attr!}z1 * c_x + {!position_attr!}z2 * c_y + {!position_attr!}z3 * c_z)
-{% end %}
-{% if USE_DEPTH then %}
-				if DEPTHS_Y[xx] > depth then
-					DEPTHS_Y[xx] = depth
-{% end %}
-					local cc = C
-{% if USE_COLOR then %}
-					local va_r = depth * (r1 * c_x + r2 * c_y + r3 * c_z)
-					local va_g = depth * (g1 * c_x + g2 * c_y + g3 * c_z)
-					local va_b = depth * (b1 * c_x + b2 * c_y + b3 * c_z)
-
-					va_r = _math_floor(_math_clamp(va_r * 6, 0, 5.999))
-					va_g = _math_floor(_math_clamp(va_g * 6, 0, 5.999))
-					va_b = _math_floor(_math_clamp(va_b * 6, 0, 5.999))
-					cc = va_r + (va_g * 6) + (va_b * 36)
-{% end %}
 {% if USE_UV then %}
-					if TEXTURE ~= nil then
-						local xc = depth * (u1 * c_x + u2 * c_y + u3 * c_z)
-						local yc = depth * (v1 * c_x + v2 * c_y + v3 * c_z)
-						xc = _math_clamp(_math_floor(xc * tw), 0, tw - 1)
-						yc = _math_clamp(_math_floor(yc * th), 0, th - 1)
-						cc = td[xc + yc * tw + 1]
-					end
-{% end %}
-					PIXELS_Y[xx] = cc
-					RASTERED = RASTERED + 1
-{% if USE_DEPTH then %}
+				if TEXTURE ~= nil then
+					local xc = depth * (_uv_x1 * c_x + _uv_x2 * c_y + _uv_x3 * c_z)
+					local yc = depth * (_uv_y1 * c_x + _uv_y2 * c_y + _uv_y3 * c_z)
+					xc = _math_clamp(_math_floor(xc * tw), 0, tw - 1)
+					yc = _math_clamp(_math_floor(yc * th), 0, th - 1)
+					PIXELS_Y[xx] = td[xc + yc * tw + 1]
 				end
 {% end %}
 			end
@@ -598,9 +582,40 @@ function raster.set_color(color)
 	C = color
 end
 
+function raster.set_layer(name, value)
+	for y=1,H do
+		local row = layers[name][y]
+		for x=1,W do
+			row[x] = value
+		end
+	end
+end
+
 function raster.set_size(w, h)
 	W = w
 	H = h
+
+	-- Resize 
+	for y=1,h do
+		local row = {}
+		local drow = {}
+		raster.PIXELS[y] = row
+{%
+			for _, name in pairs(LAYERS) do
+				@insert('\t\tlayer_' .. name .. '[y] = {}\n')
+			end
+%}
+		-- raster.DEPTHS[y] = drow
+		for x=1,w do
+			row[x] = 1 + 6 + 36-- 215
+{%
+				for _, name in pairs(LAYERS) do
+					@insert('\t\t\tlayer_' .. name .. '[y][x] = 0\n')
+				end
+%}
+			drow[x] = 10000
+		end
+	end
 end
 
 function raster.set_texture(texture)

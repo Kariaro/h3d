@@ -1,0 +1,736 @@
+local vsl_format = {}
+
+local function quote(text)
+	return '\'' .. text:gsub('[\\\'\"\n\t]', {
+		['\\'] = '\\\\',
+		['\''] = '\\\'',
+		['\"'] = '\\\"',
+		['\n'] = '\\n',
+		['\t'] = '\\t'
+	}) .. '\''
+end
+
+local function tokenize(source, patterns)
+	local result = {}
+	local column = 1
+	local line   = 1
+
+	while #source > 0 do
+		local group = nil
+		local count = nil
+		for name, pattern in pairs(patterns) do
+			for i=2,#pattern do
+				local cmd = pattern[i]
+				if type(cmd) == 'function' then
+					local e = cmd(source)
+					if e ~= nil and e > 0 then
+						group = pattern[1]
+						count = e
+						break
+					end
+				else
+					local s, e = source:find(cmd, 0, true)
+					if s == 1 and e > 0 then
+						group = pattern[1]
+						count = e
+						break
+					end
+				end
+			end
+
+			if count ~= nil then
+				break
+			end
+		end
+
+		if count == nil then
+			error('vsl parser got stuck on (column: ' .. column .. ', line: ' .. line .. ')')
+		end
+
+		local content = source:sub(1, count)
+
+		result[#result + 1] = {
+			type = group,
+			value = content,
+			line = line,
+			column = column
+		}
+
+		for i=1,count do
+			local c = source:sub(i,i)
+			if c == '\n' then
+				line = line + 1
+				column = 1
+			else
+				column = column + 1
+			end
+		end
+
+		source = source:sub(count + 1)
+	end
+
+	return result
+end
+
+local function token_list(tokens)
+	local M = {}
+	M.tokens = tokens
+	M.idx = 1
+
+	function M.next()
+		M.idx = M.idx + 1
+		return M.tokens[M.idx - 1]
+	end
+
+	function M.token()
+		return M.tokens[M.idx]
+	end
+
+	function M.value()
+		local token = M.token()
+		return token and token.value or nil
+	end
+
+	function M.type()
+		local token = M.token()
+		return token and token.type or nil
+	end
+
+	function M.require_value(r_value)
+		local value = M.value()
+		if value ~= r_value then
+			M.error("Required value '%s' but got '%s'", r_value, value)
+		end
+		M.next()
+	end
+
+	function M.pos()
+		local token = M.token()
+		return token and { line = token.line, column = token.column } or nil
+	end
+
+	function M.index()
+		return M.idx
+	end
+
+	function M.hasMore()
+		return M.idx <= #M.tokens
+	end
+
+	function M.error(message, ...)
+		message = string.format(message, ...)
+		local curr = M.token()
+		error('(line: ' .. curr.line .. ', column: ' .. curr.column .. ') ' .. message)
+	end
+
+	return M
+end
+
+function vsl_format.template(source,
+	LAYERS,
+	VERTEX_ATTRIBUTES,
+	FACE_ATTRIBUTES,
+	POSITION_ATTRIBUTE
+)
+	local function _get(pattern)
+		return function(text)
+			local s, e = text:find(pattern)
+			if s == 1 then
+				return e
+			end
+			return 0
+		end
+	end
+
+	print('VSL FORMAT')
+	print('=============')
+
+	local patterns = {
+		-- Multiline comments are not allowed
+		{ 'space', _get('%-%-[^\n]+') },
+		{ 'space', _get('[ \t\r\n]+') },
+		{ 'str',   _get("'[^\n]-'") },
+		{ 'num',   _get("[0-9]+%.[0-9]+"), _get("[0-9]+") },
+		{ 'op',    '==', '>=', '<=', '~=', '%', '<', '>', '*', '-', '+', '/', '(', ')', '=', '.', ',' },
+		{ 'op',    'if', 'then', 'else', 'elseif', 'end', 'for', 'do', 'local' },
+		{ 'name',  _get('[a-zA-Z][a-zA-Z0-9_]*') },
+	}
+
+	local result = {}
+	local tokens = tokenize(source, patterns)
+	for _, v in pairs(tokens) do
+		if v.type ~= 'space' then
+			result[#result + 1] = v
+		end
+	end
+
+	--[[
+	for _, v in pairs(result) do
+		print(string.format('(line: %3d, column: %3d) %-10s %s',
+			v.line,
+			v.column,
+			v.type,
+			quote(v.value)
+		))
+	end
+	]]
+
+	local ast = vsl_format.parse(token_list(result))
+	-- ccemux.setClipboard(textutils.serialize(ast, { allow_repetitions = true }))
+
+	-- print('Paused')
+	-- os.pullEvent('key')
+	local code = vsl_format.build_code(ast, {
+		variable = function(ast_error, name)
+			if name == 'gl_x' then
+				return '__va_' .. POSITION_ATTRIBUTE.name .. '_x', 'va_' .. POSITION_ATTRIBUTE.name .. '_x'
+			elseif name == 'gl_y' then
+				return '__va_' .. POSITION_ATTRIBUTE.name .. '_y', 'va_' .. POSITION_ATTRIBUTE.name .. '_y'
+			elseif name == 'gl_z' then
+				return '__va_' .. POSITION_ATTRIBUTE.name .. '_z', 'va_' .. POSITION_ATTRIBUTE.name .. '_z'
+			elseif name == 'gl_depth' then
+				return '__va', 'depth'
+			end
+			return nil, nil
+		end,
+		builtin = function(ast_error, name, args)
+			-- print('function', name, textutils.serialize(args))
+			if name == 'gl_face' then
+				if not args[1]:match("^'") then
+					ast_error("Expected string parameter")
+				end
+
+				local data = args[1]:sub(2, #args[1] - 1)
+				local attribute = nil
+				for _, attr in pairs(FACE_ATTRIBUTES) do
+					if attr.name == data then
+						attribute = attr
+						break
+					end
+				end
+
+				if attribute == nil then
+					ast_error("Could not find face attribute '" .. data .. "'")
+				end
+
+				if attribute.count > 1 and #args ~= 2 then
+					ast_error("Built in 'gl_face' requires 2 parameters")
+				elseif #args ~= 1 then
+					ast_error("Built in 'gl_face' only has 1 parameter")
+				end
+
+				local suffix = ''
+				if attribute.count > 1 then
+					local idx = tonumber(args[2]) + 1
+					suffix = '_' .. (("xyzw"):sub(idx, idx))
+				end
+
+				return false, nil, '_' .. attribute.name .. suffix
+			elseif name == 'gl_vertex' then
+				if not args[1]:match("^'") then
+					ast_error("Expected string parameter")
+				end
+
+				local data = args[1]:sub(2, #args[1] - 1)
+				local attribute = nil
+				for _, attr in pairs(VERTEX_ATTRIBUTES) do
+					if attr.name == data then
+						attribute = attr
+						break
+					end
+				end
+
+				if attribute == nil then
+					ast_error("Could not find vertex attribute '" .. data .. "'")
+				end
+
+				--[[if attribute.count > 1 and #args ~= 2 then
+					ast_error("Built in 'gl_vertex' requires 2 parameters")
+				elseif #args ~= 1 then
+					ast_error("Built in 'gl_vertex' only has 1 parameter")
+				end]]
+
+				local suffix = ''
+				if attribute.count > 1 then
+					local idx = tonumber(args[2]) + 1
+					suffix = '_' .. (("xyzw"):sub(idx, idx))
+				end
+
+				return false, '__va_' .. attribute.name .. suffix, 'va_' .. attribute.name .. suffix
+			elseif name == 'gl_color' then
+				if #args ~= 1 then
+					ast_error("Built in 'gl_color' only has 1 parameter")
+				end
+
+				return false, nil, 'PIXELS_Y[xx] = ' .. args[1] .. '\nRASTERED = RASTERED + 1'
+			elseif name == 'gl_layer' then
+				if #args ~= 1 then
+					ast_error("Built in 'gl_layer' only has 1 parameter")
+				end
+
+				if not args[1]:match("^'") then
+					ast_error("Expected string parameter")
+				end
+
+				local data = args[1]:sub(2, #args[1] - 1)
+				local layer = nil
+				for _, name in pairs(LAYERS) do
+					if data == name then
+						layer = true
+						break
+					end
+				end
+
+				if not layer then
+					ast_error("Layer '" .. data .. "' does not exist")
+				end
+
+				return false, nil, 'layer_' .. data .. '_y[xx]'
+			elseif name == 'gl_set_layer' then
+				if #args ~= 2 then
+					ast_error("Built in 'gl_set_layer' only has 2 parameters")
+				end
+
+				if not args[1]:match("^'") then
+					ast_error("Expected string parameter")
+				end
+
+				local data = args[1]:sub(2, #args[1] - 1)
+				local layer = nil
+				for _, name in pairs(LAYERS) do
+					if data == name then
+						layer = true
+						break
+					end
+				end
+
+				if not layer then
+					ast_error("Layer '" .. data .. "' does not exist")
+				end
+
+				return false, nil, 'layer_' .. data .. '_y[xx] = ' .. args[2]
+			elseif name == 'gl_rgb' then
+				local result = (
+					'(_math_floor(_math_clamp({1} * 6, 0, 5.999))) + ' ..
+					'(_math_floor(_math_clamp({2} * 6, 0, 5.999)) * 6) + ' ..
+					'(_math_floor(_math_clamp({3} * 6, 0, 5.999)) * 36)'
+				):gsub('{1}', args[1]):gsub('{2}', args[2]):gsub('{3}', args[3])
+				return false, nil, result
+			elseif name == 'gl_tex' then
+				local idx = '_math_clamp(_math_floor({x} * tw), 0, tw - 1) + (_math_clamp(_math_floor({y} * th), 0, th - 1) * tw) + 1'
+				idx = idx
+					:gsub('{x}', args[1])
+					:gsub('{y}', args[2])
+				return false, nil, 'td[' .. idx .. ']'
+			end
+			return true, nil, nil
+		end,
+		format_data = function(data)
+			local lines = {}
+			local has_bary = false
+			for name, _ in pairs(data) do
+				if name:match('^__va') then
+					has_bary = true
+					if #name > 4 then
+						lines[#lines + 1] = 'local ' .. name:sub(3) .. ' = depth * ' ..
+							('({t}1 * c_x + {t}2 * c_y + {t}3 * c_z)'):gsub('{t}', name:sub(5))
+					end
+				end
+			end
+
+			if has_bary then
+				for idx, line in pairs({
+					'local xxx = xx - x_min + 0.5',
+					'local c_y = (xxx * cyy - yyy * cyx) * det',
+					'local c_z = (yyy * czx - xxx * czy) * det',
+					'local c_x = 1.0 - c_y - c_z',
+					'local depth = 1 / ({t}z1 * c_x + {t}z2 * c_y + {t}z3 * c_z)\n'
+				}) do
+					line = line:gsub('{t}', '_' .. POSITION_ATTRIBUTE.name .. '_')
+					table.insert(lines, idx, line)
+				end
+			end
+
+			return table.concat(lines, '\n')
+		end
+	})
+	-- ccemux.setClipboard(code or '')
+
+	return code
+end
+
+
+--- Build the code from the constructed AST
+---
+--- @param in_ast any a tree of syntax
+--- @param context table context methods
+--- @return string code the output code
+function vsl_format.build_code(in_ast, context)
+	local scope = {}
+	local l_scope = nil
+	local function push_scope()
+		l_scope = {}
+		scope[#scope + 1] = l_scope
+	end
+
+	local function pop_scope()
+		table.remove(scope, #scope)
+		l_scope = scope[#scope]
+	end
+
+	local function ast_error(ast, message)
+		local l = ast.pos and ast.pos.line or -1
+		local c = ast.pos and ast.pos.column or -1
+		error('(line: ' .. l .. ', column: ' .. c .. ', type: ' .. ast[1] .. ') ' .. message)
+	end
+
+	local function get_var(name)
+		for i=#scope,1,-1 do
+			local f_name = scope[i][name]
+			if f_name ~= nil then
+				return f_name
+			end
+		end
+		return nil
+	end
+
+	local function add_var(name, f_name)
+		l_scope[name] = f_name
+	end
+
+	local function indent(text, tabs)
+		local lines = {}
+		for s in string.gmatch(text .. "\n", "(.-)\n") do
+			table.insert(lines, s)
+		end
+		local pad = ''
+		for i=1,tabs do
+			pad = pad .. '\t'
+		end
+		return pad .. table.concat(lines, '\n' .. pad):gsub('\n[\t]+\n', '\n\n')
+	end
+
+	push_scope()
+
+	local pre_data = {}
+
+	local format_statements
+	local format_call
+
+	local function format_expr(ast)
+		if ast[1] == 'P_EXPR' then
+			return '(' .. format_expr(ast[2]) .. ')'
+		-- elseif ast[1] == 'C_EXPR' then
+		-- 	local args = {}
+		-- 	for _, value in ipairs(ast[2]) do
+		-- 		args[#args + 1] = format_expr(value)
+		-- 	end
+		-- 	return table.concat(args, ', ')
+		elseif ast[1] == 'B_EXPR' then
+			return format_expr(ast[3]) .. ' ' .. ast[2] .. ' ' .. format_expr(ast[4])
+		elseif ast[1] == 'U_EXPR' then
+			return ast[2] .. ' ' .. format_expr(ast[3])
+		elseif ast[1] == 'ATOM' then
+			return ast[2]
+		elseif ast[1] == 'NAME' then
+			local data, value = context.variable(
+				function(message) ast_error(ast, message) end,
+				ast[2]
+			)
+
+			-- print(ast[2], data, value)
+
+			if data ~= nil then
+				pre_data[data] = true
+			end
+
+			local name = get_var(ast[2])
+
+			return value and value or (name or ast[2])
+		elseif ast[1] == 'CALL' then
+			return format_call(ast)
+		end
+
+		return '<not-impl-' .. tostring(ast[1]) .. '>'
+	end
+
+	local function format_if(ast)
+		push_scope()
+		local lines = {
+			'if ' .. format_expr(ast[2]) .. ' then',
+			indent(format_statements(ast[3]), 1),
+			'end'
+		}
+		pop_scope()
+		return table.concat(lines, '\n')
+	end
+
+	local function format_set(ast)
+		local f_name = get_var(ast[2])
+		if get_var(ast[2]) == nil then
+			ast_error(ast, "Variable '" .. ast[2] .. "' is not defined")
+		end
+
+		return f_name .. ' = ' .. format_expr(ast[3])
+	end
+
+	local function format_var(ast)
+		for index, name in ipairs(ast[2]) do
+			if get_var(name) then
+				ast_error(ast, "Variable '" .. name .. "' is redefined")
+			end
+			local f_name = '___' .. name
+			add_var(name, f_name)
+			ast[2][index] = f_name
+		end
+
+		local result = 'local ' .. table.concat(ast[2], ', ')
+		if #ast > 2 then
+			result = result .. ' = ' .. format_expr(ast[3])
+		end
+
+		return result
+	end
+
+	format_call = function(ast)
+		local args = {}
+		for index, expr in ipairs(ast[3]) do
+			if index > 1 then
+				args[#args + 1] = format_expr(expr)
+			end
+		end
+
+		local allow_raw_call, data, value = context.builtin(
+			function(message) ast_error(ast, message) end,
+			ast[2],
+			args
+		)
+
+		if allow_raw_call then
+			return ast[2] .. '(' .. table.concat(args, ', ') .. ')'
+		end
+
+		if data ~= nil then
+			pre_data[data] = true
+		end
+
+		if value == nil then
+			return ''
+		end
+
+		return value
+	end
+
+	format_statements = function(ast)
+		local lines = {}
+		for i=2,#ast do
+			local stat = ast[i]
+			local type = stat[1]
+
+			if stat == nil then
+				ast_error(ast, "Nil statement '" .. type .. "'")
+			end
+
+			if type == 'IF' then
+				lines[#lines + 1] = format_if(stat)
+			elseif type == 'VAR' then
+				lines[#lines + 1] = format_var(stat)
+			elseif type == 'SET' then
+				lines[#lines + 1] = format_set(stat)
+			elseif type == 'CALL' then
+				lines[#lines + 1] = format_call(stat)
+			else
+				ast_error(ast, "Unknown type '" .. type .. "'")
+			end
+		end
+
+		return table.concat(lines, '\n')
+	end
+
+	local code = format_statements(in_ast)
+	local before = context.format_data(pre_data) or ''
+	if #before > 1 then
+		before = before .. '\n'
+	end
+
+	return before .. code
+end
+
+--- Parse a given list of tokens into an AST
+---
+--- @param reader any a token reader
+--- @return table ast an AST containing all the symbols
+function vsl_format.parse(reader)
+	local function create_lookup(...)
+		local result = {}
+		for _, v in ipairs({...}) do
+			result[v] = true
+		end
+		return result
+	end
+
+	local binary = create_lookup('>=', '==', '<=', '<', '>', '+', '-', '*', '/', 'and', 'or', '.')
+	local unary  = create_lookup('not', '-')
+	local expression
+	local statement_list
+
+	local function sub_expression()
+		local pos = reader.pos()
+		local r_type = reader.type()
+		local r_value = reader.value()
+
+		if r_value == '(' then -- First check for parenthesis
+			reader.next()
+			local content = expression(true)
+			reader.require_value(')')
+			return { 'P_EXPR', content; pos = pos }
+		elseif r_type == 'name' then
+			reader.next()
+			if reader.value() == '(' then
+				reader.next()
+				local args = expression(true)
+				if args[1] ~= 'C_EXPR' then
+					args = { 'C_EXPR', args; pos = args.pos }
+				end
+				reader.require_value(')')
+				return { 'CALL', r_value, args; pos = pos }
+			end
+			return { 'NAME', r_value; pos = pos }
+		elseif unary[r_value] then -- Then check for unary
+			reader.next()
+			return { 'U_EXPR', r_value, expression(false); pos = pos }
+		elseif r_type == 'str' or r_type == 'num' then -- Stop
+			reader.next()
+			return { 'ATOM', r_value; pos = pos }
+		end
+
+		reader.error("Could not parse sub expression '%s'", r_value)
+	end
+
+	expression = function(allow_comma)
+		local a = sub_expression()
+
+		local r_value = reader.value()
+		if binary[r_value] then
+			reader.next()
+			local b = expression(false)
+			if b ~= nil then
+				a = { 'B_EXPR', r_value, a, b; pos = a.pos }
+			end
+		end
+
+		if allow_comma and reader.value() == ',' then
+			reader.next()
+			local n_expr = expression(true)
+
+			if n_expr == nil then
+				reader.error('Expected expression after comma')
+			end
+
+			local result = { 'C_EXPR', a; pos = a.pos }
+
+			if n_expr[1] == 'C_EXPR' then
+				for i=2,#n_expr do
+					result[#result + 1] = n_expr[i]
+				end
+			else
+				result[#result + 1] = n_expr
+			end
+
+			return result
+		end
+
+		-- reader.error('Expression Not implemented')
+		return a
+	end
+
+	local function statement_local()
+		local pos = reader.pos()
+		reader.next()
+
+		-- For all names defined after this
+		local names = {}
+		local result = { 'VAR', names; pos = pos }
+
+		while true do
+			if reader.type() == 'name' then
+				names[#names + 1] = reader.value()
+				reader.next()
+				if reader.value() == '=' then
+					reader.next()
+					result[#result + 1] = expression(true)
+					return result
+				elseif reader.value() == ',' then
+					reader.next()
+					-- Continue
+				else
+					-- End of the statement
+					return result
+				end
+			else
+				reader.error('Invalid local expression')
+			end
+		end
+	end
+
+	local function statement_if()
+		local pos = reader.pos()
+		reader.next()
+		local condition = expression(false)
+		reader.require_value('then')
+		local body = statement_list()
+		reader.require_value('end')
+		return { 'IF', condition, body; pos = pos }
+	end
+
+	statement_list = function()
+		local result = { 'LIST'; pos = reader.pos() }
+		local idx = 0
+		while reader.hasMore() do
+			local nidx = reader.index()
+			if idx == nidx then
+				break
+			end
+			idx = nidx
+
+			local pos = reader.pos()
+			local r_value = reader.value()
+			local r_type = reader.type()
+			if r_value == 'local' then
+				result[#result + 1] = statement_local()
+			elseif r_value == 'if' then
+				result[#result + 1] = statement_if()
+			elseif r_type == 'name' then
+				-- Only assignements or calls are allowed
+
+				reader.next()
+				if reader.value() == '=' then
+					reader.next()
+					result[#result + 1] = { 'SET', r_value, expression(false); pos = pos }
+				elseif reader.value() == '(' then
+					reader.next()
+					local expr = expression(true)
+					if expr[1] ~= 'C_EXPR' then
+						expr = { 'C_EXPR', expr; pos = expr.pos }
+					end
+					result[#result + 1] = { 'CALL', r_value, expr; pos = pos }
+					reader.require_value(')')
+				else
+					reader.error("Invalid symbol '%s'", r_value)
+				end
+			end
+		end
+
+		return result
+	end
+
+	local result = statement_list()
+	if reader.hasMore() then
+		ccemux.setClipboard(textutils.serialize(result))
+		reader.error('Did not parse correctly')
+	end
+
+	return result
+end
+
+return vsl_format

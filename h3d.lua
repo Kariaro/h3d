@@ -1,10 +1,12 @@
 local h3d_format = require 'h3d_format'
+local vsl_format = require 'vsl_format'
 local h3d = {}
 
 -- Create a new render pipeline
 function h3d.create_pipeline(data)
-	local VERTEX_ATTRIBUTES = data.vertex_attributes
-	local FACE_ATTRIBUTES   = data.face_attributes
+	local VERTEX_ATTRIBUTES = data.vertex_attributes or {}
+	local FACE_ATTRIBUTES   = data.face_attributes or {}
+	local LAYERS            = data.layers or {}
 	local FRAG_SHADER       = data.frag_shader
 
 	local h = fs.open(fs.combine(shell.dir(), 'h3d_raster.plua'), 'r')
@@ -28,12 +30,23 @@ function h3d.create_pipeline(data)
 		table.insert(VERTEX_ATTRIBUTES, 1, POSITION_ATTRIBUTE)
 	end
 
+	local shader = vsl_format.template(
+		FRAG_SHADER,
+		LAYERS,
+		VERTEX_ATTRIBUTES,
+		FACE_ATTRIBUTES,
+		POSITION_ATTRIBUTE
+	)
+
 	print('Creating raster pipeline')
 	local result = h3d_format.template(content, {
 		VERTEX_ATTRIBUTES  = VERTEX_ATTRIBUTES,
 		FACE_ATTRIBUTES    = FACE_ATTRIBUTES,
+		LAYERS             = LAYERS,
 
-		POSITION_ATTRIBUTE = POSITION_ATTRIBUTE
+		POSITION_ATTRIBUTE = POSITION_ATTRIBUTE,
+
+		FRAG_SHADER = shader
 	}, function(name, source)
 		local h = fs.open(fs.combine(shell.dir(), name .. '.lua'), 'w')
 		h.write(source)

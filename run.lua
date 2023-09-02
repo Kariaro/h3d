@@ -9,21 +9,27 @@ local raster, geometry = h3d.create_pipeline({
 	vertex_attributes = {
 		{ name = 'position', count = 3, position = true },
 
---		{ name = 'uv',       count = 2 },
---		{ name = 'color',    count = 3 },
---		{ name = 'alpha',    count = 1 },
+		{ name = 'uv',       count = 2 },
+		{ name = 'color',    count = 3 },
 --		{ name = 'normal',   count = 3 },
 	},
 	face_attributes = {
-		{ name = 'face_id',    count = 1 },
-		{ name = 'C', count = 1 },
+		{ name = 'color',      count = 1 },
+	},
+	layers = {
+		'depth'
 	},
 	frag_shader = [[
-		local rgb = gl_tex(va_u, va_b, 0)
-		
-		gl_color = rgb -- gl_rgb(va_r, va_g, va_b)
-	]]
+		if gl_layer('depth') > gl_depth then
+			gl_set_layer('depth', gl_depth)
+			local cc = gl_tex(gl_vertex('uv', 0), gl_vertex('uv', 1))
+			-- local cc = gl_rgb(gl_vertex('color', 0), gl_vertex('color', 1), gl_vertex('color', 2))
+			gl_color(cc) -- gl_face('color'))
+		end
+]]
 })
+
+-- raster.bind_texture(TEX_BIG, 0)
 
 local TEX_BIG = h3d.load_image('cube.bin')
 local TEX_DBG = h3d.load_image('debug.bin')
@@ -67,17 +73,17 @@ end
 
 local function vertex(x, y, z, r, g, b, u, v)
 	return {
-		_position_x = x,
-		_position_y = y,
-		_position_z = z,
+		x = x,
+		y = y,
+		z = z,
 
-		_color_x = r or 0,
-		_color_y = g or 0,
-		_color_z = b or 0,
-		_alpha_x = 0,
+		r = r or 0,
+		g = g or 0,
+		b = b or 0,
+		a = 0,
 
-		_uv_x = u or 0,
-		_uv_y = v or 0,
+		u = u or 0,
+		v = v or 0,
 
 		_normal_x = 0,
 		_normal_y = 0,
@@ -88,7 +94,7 @@ end
 local C = 10
 
 local function draw_cube(x, y, z, rx, ry, rz, near, gr, cx, cy, cz)
-	raster.set_texture(CC_FONT) -- TEX_BIG)
+	raster.set_texture(TEX_BIG) -- TEX_BIG)
 
 	local s = -0.5
 	local e =  0.5
@@ -204,13 +210,24 @@ local function draw_cube(x, y, z, rx, ry, rz, near, gr, cx, cy, cz)
 		-- v3.z = v3.z + z
 
 		C = (i * 3 + C * 17 + 100) % 220
+
+		geometry
+			.vertex('position', v1.x, v1.y, v1.z)
+			.vertex('position', v2.x, v2.y, v2.z)
+			.vertex('position', v3.x, v3.y, v3.z)
+			.vertex('color', v1.r, v1.g, v1.b)
+			.vertex('color', v2.r, v2.g, v2.b)
+			.vertex('color', v3.r, v3.g, v3.b)
+			.vertex('uv', v1.u, v1.v)
+			.vertex('uv', v2.u, v2.v)
+			.face('color', C)
 		-- print()
 		-- print(v1.r, v1.g, v1.b, '  ', v1.x, v1.y, v1.z)
 		-- print(v2.r, v2.g, v2.b, '  ', v2.x, v2.y, v2.z)
 		-- print(v3.r, v3.g, v3.b, '  ', v3.x, v3.y, v3.z)
 		-- print(v1.u, v1.v, v2.u, v2.v, v3.u, v3.v)
-		raster.set_color(C)
-		raster.renderTriangleCulling(v1, v2, v3, near)
+
+		raster.renderTriangleCulling(geometry.build(), near)
 	end
 end
 
@@ -243,14 +260,13 @@ end
 
 
 local function raster_clear()
+	raster.set_layer('depth', 10000)
+
 	for y=1,h do
 		local row = {}
-		local drow = {}
 		raster.PIXELS[y] = row
-		raster.DEPTHS[y] = drow
 		for x=1,w do
 			row[x] = 1 + 6 + 36-- 215
-			drow[x] = 10000
 		end
 	end
 end
@@ -337,19 +353,6 @@ local function render_loop()
 		local e = 0
 		math.randomseed(p_z)
 
-		C = 1
-		-- local test = bench.generate(math.floor(p_z) + 1, 500, 500, -250, -250) -- [math.floor(p_x * 2)] }
-		local test = bench.generate(0, 500, 500, -250, -250) -- [math.floor(p_x * 2)] }
-		for i, v in ipairs(test) do
-			local p1 = vertex(v[1].x, v[1].y, 500)
-			local p2 = vertex(v[2].x, v[2].y, 500)
-			local p3 = vertex(v[3].x, v[3].y, 500)
-			C = (i * 3 + C * 17 + 100) % 220
-
-			raster.set_color(C)
-			raster.renderTriangleCulling(p1, p2, p3, 0.01)
-		end
-
 		local near = 1
 		C = 1
 		-- draw_cube(0, 0, 0, p_rx, p_ry, p_rz, near, nil, p_x, p_y, p_z)
@@ -365,8 +368,8 @@ local function render_loop()
 
 		C = 1
 		local dz = (index - 500) / 10
-		for ix=1,1 do
-			for iz=1,1 do
+		for ix=1,10 do
+			for iz=1,10 do
 				draw_cube(ix - 5, 1, 2 + iz, p_rx, p_ry, p_rz, near, nil, p_x, p_y, p_z)
 			end
 		end
@@ -413,7 +416,7 @@ local function render_benchmark()
 	raster_clear()
 	term.drawPixels(1, 1, 0, w, h)
 
-	local count = 100000
+	local count = 100
 	local t0 = os.clock()
 
 	math.randomseed(0)
@@ -428,6 +431,7 @@ local function render_benchmark()
 			.vertex('position', v[1].x, v[1].y, 500)
 			.vertex('position', v[2].x, v[2].y, 500)
 			.vertex('position', v[3].x, v[3].y, 500)
+			.face('color', C)
 			.build()
 
 		raster.renderTriangleCulling(buffer, 0.01)
@@ -443,15 +447,15 @@ local function render_benchmark()
 			.vertex('position', v[1].x, v[1].y, 500)
 			.vertex('position', v[2].x, v[2].y, 500)
 			.vertex('position', v[3].x, v[3].y, 500)
-			.face('C', C)
+			.face('color', C)
 
 		if i % 2000 == 0 then
 			os.sleep(0)
 		end
+
+		raster.renderTriangleCulling(geometry.build(), 0.01)
 	end
 	local t2 = os.clock()
-
-	raster.renderTriangleCulling(geometry.build(), 0.01)
 
 	local r_pixels, _ = raster.get_rastered_info()
 	print('pixels ' .. r_pixels)
@@ -512,7 +516,7 @@ end
 
 -- render_benchmark
 -- Make sure we reset
-local _, err = xpcall(render_benchmark, function(...)
+local _, err = xpcall(key_press, function(...)
 	print(...)
 	print(debug.traceback())
 	term.setFrozen(false)
