@@ -25,7 +25,7 @@ function h3d.create_pipeline(data)
 end
 
 function h3d.load_image(name)
-	local f = fs.open('dev/test/img/' .. name, 'rb')
+	local f = fs.open('h3d/img/' .. name, 'rb')
 	local w = f.read() + f.read() * 256
 	local h = f.read() + f.read() * 256
 	local data = {}

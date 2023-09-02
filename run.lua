@@ -4,8 +4,8 @@ local bench = require '../eval/benchmark/generator/triangle_generator'
 local raster = h3d.create_pipeline({
 	vertex_attributes = {
 --		{ name = 'Vertex', data = { 'x', 'y', 'z' } },
---		{ name = 'Uv',     data = { 'u', 'v' } },
---		{ name = 'Color',  data = { 'r', 'g', 'b'} },
+		{ name = 'Uv',     data = { 'u', 'v' } },
+		{ name = 'Color',  data = { 'r', 'g', 'b'} },
 --		{ name = 'Alpha',  data = { 'a' } },
 --		{ name = 'Normal', data = { 'nx', 'ny', 'nz' } },
 	},
@@ -24,6 +24,7 @@ local raster = h3d.create_pipeline({
 local TEX_BIG = h3d.load_image('cube.bin')
 local TEX_DBG = h3d.load_image('debug.bin')
 local TEX_FAC = h3d.load_image('pfp.bin')
+local CC_FONT = h3d.load_image('cc_font.bin')
 
 local function matrixRotate(px, py, pz, rx, ry, rz, vertices)
 	local A = math.rad(rx)
@@ -79,6 +80,8 @@ local function vertex(x, y, z, r, g, b, u, v)
 		nz = 0,
 	}
 end
+
+local C = 10
 
 local function draw_cube(x, y, z, rx, ry, rz, near, gr, cx, cy, cz)
 	raster.set_texture(TEX_BIG)
@@ -202,7 +205,7 @@ local function draw_cube(x, y, z, rx, ry, rz, near, gr, cx, cy, cz)
 		-- print(v2.r, v2.g, v2.b, '  ', v2.x, v2.y, v2.z)
 		-- print(v3.r, v3.g, v3.b, '  ', v3.x, v3.y, v3.z)
 		-- print(v1.u, v1.v, v2.u, v2.v, v3.u, v3.v)
-
+		raster.set_color(C)
 		raster.renderTriangleCulling(v1, v2, v3, near)
 	end
 end
@@ -231,9 +234,7 @@ local function raster_setup()
 		term.setPaletteColor(i, r, g, b)
 	end
 
-	--for i=0,255 do
-	--	term.setPaletteColor(i, i / 255.0, i / 255.0, i / 255.0)
-	--end
+	-- for i=0,255 do term.setPaletteColor(i, i / 255.0, i / 255.0, i / 255.0) end
 end
 
 
@@ -250,22 +251,75 @@ local function raster_clear()
 	end
 end
 
+
+local function draw_text(x, y, str, fg_color, bg_color)
+	local column = 0
+	local line = 0
+	for i=1,#str do
+		local px = x + column * 6
+		local py = y + line * 9
+
+		local c = str:sub(i,i)
+		if c == '\n' then
+			line = line + 1
+			column = 0
+		else
+			column = column + 1
+			c = string.byte(c)
+
+			local c_x = (c % 16) * 8
+			local c_y = math.floor(c / 16) * 11
+
+			for yy=1,9 do
+				for xx=1,6 do
+					local ix = c_x + xx
+					local iy = c_y + yy
+					local cc = CC_FONT.data[ix + iy * 128 + 1]
+
+					if cc > 0 then
+						term.setPixel(px + xx, py + yy, fg_color)
+					elseif bg_color ~= nil then
+						term.setPixel(px + xx, py + yy, bg_color)
+					end
+				end
+			end
+		end
+	end
+end
+
 local function render_loop()
 	raster_setup()
 	raster_clear()
 
 	local t0 = os.clock()
 
-	local times = 10000000
 	local index = 500
 	local frames = 0
-	for i=1,times do
+	local start_frame = os.clock()
+	local fps_list = {}
+
+	while true do
 		os.sleep(0)
 		if not running then
 			break
 		end
 
-		if os.clock() - t0 > 100 then
+		if os.clock() - start_frame > 1 then
+			start_frame = start_frame + 1
+			table.insert(fps_list, 1, frames)
+			if #fps_list > 3 then
+				table.remove(fps_list, #fps_list)
+			end
+			frames = 0
+		end
+
+		local fps = 0
+		for _, i in pairs(fps_list) do
+			fps = fps + i
+		end
+		fps = fps / math.max(1, #fps_list)
+
+		if os.clock() - t0 > 1000 then
 			break
 		end
 
@@ -273,20 +327,15 @@ local function render_loop()
 		raster_clear()
 
 		index = index + 1
-		-- index = 195 + 500
 		local x = (math.sin(-index / 80.0) - 0.5) * 1
 		local y = (math.cos( index / 60.0) - 0.5) * 0.5
 		local z = -0.5 - 1
 		local e = 0
-		-- x = x
-		-- y = -1.0
-		-- x =  0.3 + x / 40
-
-		print(p_x)
 		math.randomseed(p_z)
-		local C = 1
+
+		C = 1
 		-- local test = bench.generate(math.floor(p_z) + 1, 500, 500, -250, -250) -- [math.floor(p_x * 2)] }
-		local test = bench.generate(1000, 500, 500, -250, -250) -- [math.floor(p_x * 2)] }
+		local test = bench.generate(0, 500, 500, -250, -250) -- [math.floor(p_x * 2)] }
 		for i, v in ipairs(test) do
 			local p1 = vertex(v[1].x, v[1].y, 500)
 			local p2 = vertex(v[2].x, v[2].y, 500)
@@ -310,15 +359,41 @@ local function render_loop()
 		draw_cube(0, 0.2, 2.6, -index / 4, -index / 10, -index / 2, near)
 		]]
 
+		C = 1
 		local dz = (index - 500) / 10
 		for ix=1,10 do
 			for iz=1,10 do
-				-- draw_cube(ix - 5, 1, 2 + iz, p_rx, p_ry, p_rz, near, nil, p_x, p_y, p_z)
+				draw_cube(ix - 5, 1, 2 + iz, p_rx, p_ry, p_rz, near, nil, p_x, p_y, p_z)
 			end
 		end
 
+		term.setFrozen(true)
 		term.drawPixels(1, 1, raster.PIXELS)
-		-- print('pixels ' .. RASTERED)
+		local r_pixels, r_triangles = raster.get_rastered_info()
+
+		draw_text(0,  0, "fps      : " .. fps, 215, 0)
+		draw_text(0,  9, "pixels   : " .. r_pixels, 215, 0)
+		draw_text(0, 18, "triangles: " .. r_triangles, 215, 0)
+
+		--[[
+		local str = ""
+		for i=0,255 do
+			local c = string.char(i)
+			if c == '\n' then
+				c = ' '
+			end
+
+			str = str .. c
+
+			if ((i + 1) % 16) == 0 then
+				str = str .. '\n'
+			end
+		end
+		draw_text(200, 10, str, 215, 0)
+		]]
+
+		term.setFrozen(false)
+
 		frames = frames + 1
 	end
 
@@ -332,15 +407,35 @@ end
 local function render_benchmark()
 	raster_setup()
 	raster_clear()
+	term.drawPixels(1, 1, 0, w, h)
 
-	local count = 10000
+	local count = 100000
+
+	local str = ""
+	for i=0,255 do
+		local c = string.char(i)
+		if c == '\n' then
+			c = ' '
+		end
+
+		str = str .. c
+
+		if ((i + 1) % 16) == 0 then
+			str = str .. '\n'
+		end
+	end
+
+	os.sleep(3)
+	if true then
+		return
+	end
 
 	local t0 = os.clock()
 
 	math.randomseed(0)
 	local shapes = bench.generate(count, 500, 500, -250, -250)
 	local t1 = os.clock()
-	local C = 1
+	C = 1
 	local p1 = vertex(0, 0, 500)
 	local p2 = vertex(0, 0, 500)
 	local p3 = vertex(0, 0, 500)
@@ -361,9 +456,11 @@ local function render_benchmark()
 		raster.renderTriangleCulling(p1, p2, p3, 0.01)
 	end
 
-	print('pixels ' .. raster.get_rastered_pixels())
+	local r_pixels, _ = raster.get_rastered_info()
+	print('pixels ' .. r_pixels)
 	term.drawPixels(1, 1, raster.PIXELS)
 	local t2 = os.clock()
+	os.sleep(4)
 
 	local gen_t = t1 - t0
 	local dra_t = t2 - t1
@@ -414,15 +511,18 @@ local function key_press()
 	end, render_loop)
 end
 
+-- render_benchmark
 -- Make sure we reset
-local _, err = xpcall(render_benchmark, function(...)
+local _, err = xpcall(key_press, function(...)
 	print(...)
 	print(debug.traceback())
+	term.setFrozen(false)
 end)
 if err then
 	print(err)
 end
 
+term.setFrozen(false)
 term.setGraphicsMode(0)
 for i=0,15 do
 	local c = 2^i
