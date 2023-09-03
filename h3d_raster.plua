@@ -7,12 +7,10 @@
 local raster = {}
 
 -- Globals
-local PIXELS = {}
-local DEPTHS = {}
 {%
 for _, name in pairs(LAYERS) do
 	@insert('local layer_' .. name .. ' = {}\n')
-	@insert('raster.layer_' .. name .. ' = layer_' .. name .. '\n')
+	@insert('local layer_' .. name .. '_write = 0\n')
 end
 %}
 
@@ -24,19 +22,18 @@ end
 %}
 }
 
-local RASTERED = 0
 local TRIANGLES = 0
-local TEXTURE = nil
 local H = 1
 local W = 1
-local C = 1
-
-raster.PIXELS = PIXELS
-raster.DEPTHS = DEPTHS
+local TEXTURE = nil
+local MISSING_TEXTURE = {
+	w = 2,
+	h = 2,
+	data = { 0, 215, 215, 0 }
+}
 
 {%
 -- Should be env variables
-local USE_UV         = true
 local USE_FACE_CULL  = false
 
 -- Calculated
@@ -350,10 +347,6 @@ local _math_clamp = function(x, min, max)
 	if x > max then return max end
 	return x
 end
-local _math_floor = math.floor
-local _math_ceil  = math.ceil
-local _math_max   = math.max
-local _math_min   = math.min
 
 local function renderTriangleInternal(
 	y_min, y_mid, y_max,
@@ -390,15 +383,16 @@ local function renderTriangleInternal(
 	end
 %}
 	-- Barycentric calculations
-	-- local cyx = x_max - x_min
-	-- local cyy = y_max - y_min
-	-- local czx = x_mid - x_min
-	-- local czy = y_mid - y_min
-	-- local det = 1 / (czx * cyy - cyx * czy)
+	local cyx = x_max - x_min
+	local cyy = y_max - y_min
+	local czx = x_mid - x_min
+	local czy = y_mid - y_min
+	local det = 1 / (czx * cyy - cyx * czy)
 
-	-- local tw = TEXTURE and TEXTURE.w
-	-- local th = TEXTURE and TEXTURE.h
-	-- local td = TEXTURE and TEXTURE.data
+	local tex = TEXTURE or MISSING_TEXTURE
+	local tw = tex.w
+	local th = tex.h
+	local td = tex.data
 
 	local y_d0 = y_mid - y_max
 	local y_d1 = y_min - y_mid
@@ -418,7 +412,6 @@ local function renderTriangleInternal(
 			local yb = yy + dy0
 
 {#triangle#}
-			local PIXELS_Y = PIXELS[yb]
 {%
 			for _, name in pairs(LAYERS) do
 				@insert('\t\t\tlocal layer_' .. name .. '_y = layer_' .. name .. '[yb]\n')
@@ -519,7 +512,7 @@ end), 1)
 !}
 end
 
-function raster.renderTriangleCulling(geometry, near)
+function raster.drawGeometry(geometry, near)
 {%
 	local face_size = 0
 	for _, v in pairs(VERTEX_ATTRIBUTES) do
@@ -555,25 +548,10 @@ function raster.renderTriangleCulling(geometry, near)
 			@insert('\n')
 		end
 %}
-		-- print()
-		-- print({!position_attr!}x1, {!position_attr!}x2, {!position_attr!}x3)
-		-- print({!position_attr!}y1, {!position_attr!}y2, {!position_attr!}y3)
-		-- print({!position_attr!}z1, {!position_attr!}z2, {!position_attr!}z3)
 {!
 		textindent(if_greater({ position_attr .. 'z1', position_attr .. 'z2', position_attr .. 'z3' }, 'near', triangleCases), 2)
 !}
 	end
-end
-
-local function rgb(r, g, b)
-	r = _math_floor(_math_clamp(r * 6, 0, 6))
-	g = _math_floor(_math_clamp(g * 6, 0, 6))
-	b = _math_floor(_math_clamp(b * 6, 0, 6))
-	return r + (g * 7) + (b * 42)
-end
-
-function raster.set_color(color)
-	C = color
 end
 
 function raster.set_layer(name, value)
@@ -585,29 +563,27 @@ function raster.set_layer(name, value)
 	end
 end
 
+function raster.get_layer(name)
+	return layers[name]
+end
+
 function raster.set_size(w, h)
 	W = w
 	H = h
 
 	-- Resize 
 	for y=1,h do
-		local row = {}
-		local drow = {}
-		raster.PIXELS[y] = row
+{%
+		for _, name in pairs(LAYERS) do
+			@insert('\t\tlayer_' .. name .. '[y] = {}\n')
+		end
+%}
+		for x=1,w do
 {%
 			for _, name in pairs(LAYERS) do
-				@insert('\t\tlayer_' .. name .. '[y] = {}\n')
+				@insert('\t\t\tlayer_' .. name .. '[y][x] = 0\n')
 			end
 %}
-		-- raster.DEPTHS[y] = drow
-		for x=1,w do
-			row[x] = 1 + 6 + 36-- 215
-{%
-				for _, name in pairs(LAYERS) do
-					@insert('\t\t\tlayer_' .. name .. '[y][x] = 0\n')
-				end
-%}
-			drow[x] = 10000
 		end
 	end
 end
@@ -617,11 +593,25 @@ function raster.set_texture(texture)
 end
 
 function raster.get_rastered_info()
-	local result = RASTERED
-	local tris = TRIANGLES
-	RASTERED = 0
+	local result = {
+		fragment = {
+{%
+			for _, name in pairs(LAYERS) do
+				@insert('\t\t\t' .. name .. ' = layer_' .. name .. '_write,\n')
+			end
+%}
+		},
+		triangles = TRIANGLES
+	}
+
 	TRIANGLES = 0
-	return result, tris
+{%
+	for _, name in pairs(LAYERS) do
+		@insert('\tlayer_' .. name .. '_write = 0\n')
+	end
+%}
+
+	return result
 end
 
 return raster

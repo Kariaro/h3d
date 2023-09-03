@@ -126,7 +126,16 @@ local function token_list(tokens)
 	return M
 end
 
-function vsl_format.template(source,
+
+--- Process the vsl code and convert it into a shader
+---
+--- @param source string the vsl shader code
+--- @param LAYERS table a table of valid layers
+--- @param VERTEX_ATTRIBUTES table a table of vertex attributes
+--- @param FACE_ATTRIBUTES table a table of face attributes
+--- @param POSITION_ATTRIBUTE table the possition attribute
+--- @return string
+function vsl_format.process(source,
 	LAYERS,
 	VERTEX_ATTRIBUTES,
 	FACE_ATTRIBUTES,
@@ -257,12 +266,6 @@ function vsl_format.template(source,
 				end
 
 				return false, '__va_' .. attribute.name .. suffix, 'va_' .. attribute.name .. suffix
-			elseif name == 'gl_color' then
-				if #args ~= 1 then
-					ast_error("Built in 'gl_color' only has 1 parameter")
-				end
-
-				return false, nil, 'PIXELS_Y[xx] = ' .. args[1] .. '\nRASTERED = RASTERED + 1'
 			elseif name == 'gl_layer' then
 				if #args ~= 1 then
 					ast_error("Built in 'gl_layer' only has 1 parameter")
@@ -308,7 +311,7 @@ function vsl_format.template(source,
 					ast_error("Layer '" .. data .. "' does not exist")
 				end
 
-				return false, nil, 'layer_' .. data .. '_y[xx] = ' .. args[2]
+				return false, nil, 'layer_' .. data .. '_y[xx] = ' .. args[2] .. '\nlayer_' .. data .. '_write = layer_' .. data .. '_write + 1'
 			elseif name == 'gl_rgb' then
 				local result = (
 					'(_math_floor(_math_clamp({1} * 6, 0, 5.999))) + ' ..

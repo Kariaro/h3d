@@ -9,7 +9,7 @@ local raster, geometry = h3d.create_pipeline({
 	vertex_attributes = {
 		{ name = 'position', count = 3, position = true },
 
---		{ name = 'uv',       count = 2 },
+		{ name = 'uv',       count = 2 },
 --		{ name = 'color',    count = 3 },
 --		{ name = 'normal',   count = 3 },
 	},
@@ -17,14 +17,15 @@ local raster, geometry = h3d.create_pipeline({
 		{ name = 'color',      count = 1 },
 	},
 	layers = {
+		'color',
 		'depth'
 	},
-	frag_shader = "gl_color(gl_face('color'))" --[[
-		if gl_layer('depth') > gl_depth then
+	frag_shader = --"gl_set_layer('color', gl_face('color'))" --[[
+[[		if gl_layer('depth') > gl_depth then
 			gl_set_layer('depth', gl_depth)
 			local cc = gl_tex(gl_vertex('uv', 0), gl_vertex('uv', 1))
 			-- local cc = gl_rgb(gl_vertex('color', 0), gl_vertex('color', 1), gl_vertex('color', 2))
-			gl_color(cc) -- gl_face('color'))
+			gl_set_layer('color', cc) --gl_face('color'))
 		end
 ]]
 })
@@ -228,7 +229,7 @@ local function draw_cube(x, y, z, rx, ry, rz, near, gr, cx, cy, cz)
 		-- print(v3.r, v3.g, v3.b, '  ', v3.x, v3.y, v3.z)
 		-- print(v1.u, v1.v, v2.u, v2.v, v3.u, v3.v)
 
-		raster.renderTriangleCulling(geometry.build(), near)
+		raster.drawGeometry(geometry.build(), near)
 	end
 end
 
@@ -262,14 +263,7 @@ end
 
 local function raster_clear()
 	raster.set_layer('depth', 10000)
-
-	for y=1,h do
-		local row = {}
-		raster.PIXELS[y] = row
-		for x=1,w do
-			row[x] = 1 + 6 + 36-- 215
-		end
-	end
+	raster.set_layer('color', 1 + 6 + 36) -- 215
 end
 
 
@@ -376,12 +370,12 @@ local function render_loop()
 		end
 
 		term.setFrozen(true)
-		term.drawPixels(1, 1, raster.PIXELS)
-		local r_pixels, r_triangles = raster.get_rastered_info()
+		term.drawPixels(1, 1, raster.get_layer('color'))
+		local info = raster.get_rastered_info()
 
 		draw_text(0,  0, "fps      : " .. fps, 215, 0)
-		draw_text(0,  9, "pixels   : " .. r_pixels, 215, 0)
-		draw_text(0, 18, "triangles: " .. r_triangles, 215, 0)
+		draw_text(0,  9, "pixels   : " .. info.fragment.color, 215, 0)
+		draw_text(0, 18, "triangles: " .. info.triangles, 215, 0)
 
 		--[[
 		local str = ""
@@ -435,7 +429,7 @@ local function render_benchmark()
 			.face('color', C)
 			.build()
 
-		raster.renderTriangleCulling(buffer, 0.01)
+		raster.drawGeometry(buffer, 0.01)
 	end
 	raster_clear()
 	raster.get_rastered_info()
@@ -455,11 +449,11 @@ local function render_benchmark()
 		end
 	end
 	local t2 = os.clock()
-	raster.renderTriangleCulling(geometry.build(), 0.01)
+	raster.drawGeometry(geometry.build(), 0.01)
 
-	local r_pixels, _ = raster.get_rastered_info()
-	print('pixels ' .. r_pixels)
-	term.drawPixels(1, 1, raster.PIXELS)
+	local info = raster.get_rastered_info()
+	print('pixels ' .. info.fragment.color)
+	term.drawPixels(1, 1, raster.get_layer('color'))
 	local t3 = os.clock()
 	os.sleep(1)
 
