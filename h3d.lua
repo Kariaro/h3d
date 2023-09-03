@@ -30,27 +30,29 @@ function h3d.create_pipeline(data)
 		table.insert(VERTEX_ATTRIBUTES, 1, POSITION_ATTRIBUTE)
 	end
 
-	local shader = vsl_format.template(
-		FRAG_SHADER,
-		LAYERS,
-		VERTEX_ATTRIBUTES,
-		FACE_ATTRIBUTES,
-		POSITION_ATTRIBUTE
-	)
+	local shader = vsl_format.process(FRAG_SHADER, {
+		layers = LAYERS,
+		vertex_attributes = VERTEX_ATTRIBUTES,
+		face_attributes = FACE_ATTRIBUTES,
+		position = POSITION_ATTRIBUTE
+	})
+
+	-- ccemux.setClipboard(textutils.serialize(shader))
 
 	print('Creating raster pipeline')
-	local result = h3d_format.template(content, {
+	local result = h3d_format.process(content, {
 		VERTEX_ATTRIBUTES  = VERTEX_ATTRIBUTES,
 		FACE_ATTRIBUTES    = FACE_ATTRIBUTES,
 		LAYERS             = LAYERS,
 
 		POSITION_ATTRIBUTE = POSITION_ATTRIBUTE,
 
-		FRAG_SHADER = shader
+		FRAG_SHADER = shader.frag_shader,
+		SHADER = shader
 	}, function(name, source)
-		local h = fs.open(fs.combine(shell.dir(), name .. '.lua'), 'w')
-		h.write(source)
-		h.close()
+		local tmp = fs.open(fs.combine(shell.dir(), name .. '.lua'), 'w')
+		tmp.write(source)
+		tmp.close()
 	end)
 
 	return result, h3d.geometry(VERTEX_ATTRIBUTES, FACE_ATTRIBUTES)

@@ -10,6 +10,12 @@ local function quote(text)
 	}) .. '\''
 end
 
+
+--- Split a string into tokens
+--- 
+--- @param source string a string
+--- @param patterns table a table containing the patterns
+--- @return table tokens a table of tokens
 local function tokenize(source, patterns)
 	local result = {}
 	local column = 1
@@ -18,7 +24,7 @@ local function tokenize(source, patterns)
 	while #source > 0 do
 		local group = nil
 		local count = nil
-		for name, pattern in pairs(patterns) do
+		for _, pattern in pairs(patterns) do
 			for i=2,#pattern do
 				local cmd = pattern[i]
 				if type(cmd) == 'function' then
@@ -49,12 +55,14 @@ local function tokenize(source, patterns)
 
 		local content = source:sub(1, count)
 
-		result[#result + 1] = {
-			type = group,
-			value = content,
-			line = line,
-			column = column
-		}
+		if group ~= nil then
+			result[#result + 1] = {
+				type = group,
+				value = content,
+				line = line,
+				column = column
+			}
+		end
 
 		for i=1,count do
 			local c = source:sub(i,i)
@@ -130,17 +138,9 @@ end
 --- Process the vsl code and convert it into a shader
 ---
 --- @param source string the vsl shader code
---- @param LAYERS table a table of valid layers
---- @param VERTEX_ATTRIBUTES table a table of vertex attributes
---- @param FACE_ATTRIBUTES table a table of face attributes
---- @param POSITION_ATTRIBUTE table the possition attribute
---- @return string
-function vsl_format.process(source,
-	LAYERS,
-	VERTEX_ATTRIBUTES,
-	FACE_ATTRIBUTES,
-	POSITION_ATTRIBUTE
-)
+--- @param context table a table with data
+--- @return table a table containing the output
+function vsl_format.process(source, context)
 	local function _get(pattern)
 		return function(text)
 			local s, e = text:find(pattern)
@@ -151,30 +151,20 @@ function vsl_format.process(source,
 		end
 	end
 
-	print('VSL FORMAT')
-	print('=============')
-
 	local patterns = {
-		-- Multiline comments are not allowed
-		{ 'space', _get('%-%-[^\n]+') },
-		{ 'space', _get('[ \t\r\n]+') },
-		{ 'str',   _get("'[^\n]-'") },
-		{ 'num',   _get("[0-9]+%.[0-9]+"), _get("[0-9]+") },
-		{ 'op',    '==', '>=', '<=', '~=', '%', '<', '>', '*', '-', '+', '/', '(', ')', '=', '.', ',' },
-		{ 'op',    'if', 'then', 'else', 'elseif', 'end', 'for', 'do', 'local' },
-		{ 'name',  _get('[a-zA-Z][a-zA-Z0-9_]*') },
+		{ nil,    _get('%-%-[^\n]+') },
+		{ nil,    _get('[ \t\r\n]+') },
+		{ 'str',  _get("'[^\n]-'") },
+		{ 'num',  _get("[0-9]+%.[0-9]+"), _get("[0-9]+") },
+		{ 'op',   '==', '>=', '<=', '~=', '%', '<', '>', '*', '-', '+', '/', '(', ')', '=', '.', ',' },
+		{ 'op',   'if', 'then', 'else', 'end', 'for', 'do', 'local' },
+		{ 'name', _get('[a-zA-Z][a-zA-Z0-9_]*') },
 	}
 
-	local result = {}
 	local tokens = tokenize(source, patterns)
-	for _, v in pairs(tokens) do
-		if v.type ~= 'space' then
-			result[#result + 1] = v
-		end
-	end
 
 	--[[
-	for _, v in pairs(result) do
+	for _, v in pairs(tokens) do
 		print(string.format('(line: %3d, column: %3d) %-10s %s',
 			v.line,
 			v.column,
@@ -184,12 +174,60 @@ function vsl_format.process(source,
 	end
 	]]
 
-	local ast = vsl_format.parse(token_list(result))
-	-- ccemux.setClipboard(textutils.serialize(ast, { allow_repetitions = true }))
+	local POSITION_ATTRIBUTE = context.position
+	local FACE_ATTRIBUTES    = context.face_attributes
+	local VERTEX_ATTRIBUTES  = context.vertex_attributes
+	local LAYERS             = context.layers
 
-	-- print('Paused')
-	-- os.pullEvent('key')
-	local code = vsl_format.build_code(ast, {
+	local output = {
+		-- A list of accessed layers
+		used_layers = {},
+
+		-- A list of accessed textures (EXPERIMENTAL)
+		used_textures = {},
+
+		-- A list of used vertex attributes
+		used_vertex_attributes = {},
+
+		-- A list of used face attributes
+		used_face_attributes = {},
+
+		-- If the pipeline used barycentric coordinates
+		uses_barycentric = false,
+
+		-- The fragment shader output
+		frag_shader = nil
+	}
+
+	local function find_vertex_attribute(name)
+		for _, attr in pairs(VERTEX_ATTRIBUTES) do
+			if attr.name == name then
+				return attr
+			end
+		end
+		return nil
+	end
+
+	local function find_face_attribute(name)
+		for _, attr in pairs(FACE_ATTRIBUTES) do
+			if attr.name == name then
+				return attr
+			end
+		end
+		return nil
+	end
+
+	local function find_layer(name)
+		for _, layer in pairs(LAYERS) do
+			if layer == name then
+				return layer
+			end
+		end
+		return nil
+	end
+
+	local ast = vsl_format.parse(token_list(tokens))
+	output.frag_shader = vsl_format.build_code(ast, {
 		variable = function(ast_error, name)
 			if name == 'gl_x' then
 				return '__va_' .. POSITION_ATTRIBUTE.name .. '_x', 'va_' .. POSITION_ATTRIBUTE.name .. '_x'
@@ -202,22 +240,15 @@ function vsl_format.process(source,
 			end
 			return nil, nil
 		end,
-		builtin = function(ast_error, name, args)
-			-- print('function', name, textutils.serialize(args))
-			if name == 'gl_face' then
+
+		builtin = {
+			gl_face = function(ast_error, args)
 				if not args[1]:match("^'") then
 					ast_error("Expected string parameter")
 				end
 
 				local data = args[1]:sub(2, #args[1] - 1)
-				local attribute = nil
-				for _, attr in pairs(FACE_ATTRIBUTES) do
-					if attr.name == data then
-						attribute = attr
-						break
-					end
-				end
-
+				local attribute = find_face_attribute(data)
 				if attribute == nil then
 					ast_error("Could not find face attribute '" .. data .. "'")
 				end
@@ -229,44 +260,43 @@ function vsl_format.process(source,
 				end
 
 				local suffix = ''
+				local used = output.used_face_attributes[data] or 0
 				if attribute.count > 1 then
 					local idx = tonumber(args[2]) + 1
 					suffix = '_' .. (("xyzw"):sub(idx, idx))
+					output.used_face_attributes[data] = bit32.bor(used, 2 ^ (idx - 1))
+				else
+					output.used_face_attributes[data] = bit32.bor(used, 1)
 				end
 
-				return false, nil, '_' .. attribute.name .. suffix
-			elseif name == 'gl_vertex' then
+				return nil, '_' .. attribute.name .. suffix
+			end,
+
+			gl_vertex = function(ast_error, args)
 				if not args[1]:match("^'") then
 					ast_error("Expected string parameter")
 				end
 
 				local data = args[1]:sub(2, #args[1] - 1)
-				local attribute = nil
-				for _, attr in pairs(VERTEX_ATTRIBUTES) do
-					if attr.name == data then
-						attribute = attr
-						break
-					end
-				end
-
+				local attribute = find_vertex_attribute(data)
 				if attribute == nil then
 					ast_error("Could not find vertex attribute '" .. data .. "'")
 				end
 
-				--[[if attribute.count > 1 and #args ~= 2 then
-					ast_error("Built in 'gl_vertex' requires 2 parameters")
-				elseif #args ~= 1 then
-					ast_error("Built in 'gl_vertex' only has 1 parameter")
-				end]]
-
 				local suffix = ''
+				local used = output.used_vertex_attributes[data] or 0
 				if attribute.count > 1 then
 					local idx = tonumber(args[2]) + 1
 					suffix = '_' .. (("xyzw"):sub(idx, idx))
+					output.used_vertex_attributes[data] = bit32.bor(used, 2 ^ (idx - 1))
+				else
+					output.used_face_attributes[data] = bit32.bor(used, 1)
 				end
 
-				return false, '__va_' .. attribute.name .. suffix, 'va_' .. attribute.name .. suffix
-			elseif name == 'gl_layer' then
+				return '__va_' .. attribute.name .. suffix, 'va_' .. attribute.name .. suffix
+			end,
+
+			gl_layer = function(ast_error, args)
 				if #args ~= 1 then
 					ast_error("Built in 'gl_layer' only has 1 parameter")
 				end
@@ -276,20 +306,16 @@ function vsl_format.process(source,
 				end
 
 				local data = args[1]:sub(2, #args[1] - 1)
-				local layer = nil
-				for _, name in pairs(LAYERS) do
-					if data == name then
-						layer = true
-						break
-					end
-				end
-
-				if not layer then
+				local layer = find_layer(data)
+				if layer == nil then
 					ast_error("Layer '" .. data .. "' does not exist")
 				end
 
-				return false, nil, 'layer_' .. data .. '_y[xx]'
-			elseif name == 'gl_set_layer' then
+				output.used_layers[data] = true
+				return nil, 'layer_' .. data .. '_y[xx]'
+			end,
+
+			gl_set_layer = function(ast_error, args)
 				if #args ~= 2 then
 					ast_error("Built in 'gl_set_layer' only has 2 parameters")
 				end
@@ -299,35 +325,32 @@ function vsl_format.process(source,
 				end
 
 				local data = args[1]:sub(2, #args[1] - 1)
-				local layer = nil
-				for _, name in pairs(LAYERS) do
-					if data == name then
-						layer = true
-						break
-					end
-				end
-
-				if not layer then
+				local layer = find_layer(data)
+				if layer == nil then
 					ast_error("Layer '" .. data .. "' does not exist")
 				end
 
-				return false, nil, 'layer_' .. data .. '_y[xx] = ' .. args[2] .. '\nlayer_' .. data .. '_write = layer_' .. data .. '_write + 1'
-			elseif name == 'gl_rgb' then
+				output.used_layers[data] = true
+				return nil, 'layer_' .. data .. '_y[xx] = ' .. args[2] .. '\nlayer_' .. data .. '_write = layer_' .. data .. '_write + 1'
+			end,
+
+			gl_rgb = function(ast_error, args)
 				local result = (
 					'(_math_floor(_math_clamp({1} * 6, 0, 5.999))) + ' ..
 					'(_math_floor(_math_clamp({2} * 6, 0, 5.999)) * 6) + ' ..
 					'(_math_floor(_math_clamp({3} * 6, 0, 5.999)) * 36)'
 				):gsub('{1}', args[1]):gsub('{2}', args[2]):gsub('{3}', args[3])
-				return false, nil, result
-			elseif name == 'gl_tex' then
+				return nil, result
+			end,
+
+			gl_tex = function(ast_error, args)
 				local idx = '_math_clamp(_math_floor({x} * tw), 0, tw - 1) + (_math_clamp(_math_floor({y} * th), 0, th - 1) * tw) + 1'
 				idx = idx
 					:gsub('{x}', args[1])
 					:gsub('{y}', args[2])
-				return false, nil, 'td[' .. idx .. ']'
+				return nil, 'td[' .. idx .. ']'
 			end
-			return true, nil, nil
-		end,
+		},
 		format_data = function(data)
 			local lines = {}
 			local has_bary = false
@@ -340,6 +363,8 @@ function vsl_format.process(source,
 					end
 				end
 			end
+
+			output.uses_barycentric = has_bary
 
 			if has_bary then
 				for idx, line in pairs({
@@ -357,9 +382,8 @@ function vsl_format.process(source,
 			return table.concat(lines, '\n')
 		end
 	})
-	-- ccemux.setClipboard(code or '')
 
-	return code
+	return output
 end
 
 
@@ -416,19 +440,12 @@ function vsl_format.build_code(in_ast, context)
 	push_scope()
 
 	local pre_data = {}
-
 	local format_statements
 	local format_call
 
 	local function format_expr(ast)
 		if ast[1] == 'P_EXPR' then
 			return '(' .. format_expr(ast[2]) .. ')'
-		-- elseif ast[1] == 'C_EXPR' then
-		-- 	local args = {}
-		-- 	for _, value in ipairs(ast[2]) do
-		-- 		args[#args + 1] = format_expr(value)
-		-- 	end
-		-- 	return table.concat(args, ', ')
 		elseif ast[1] == 'B_EXPR' then
 			return format_expr(ast[3]) .. ' ' .. ast[2] .. ' ' .. format_expr(ast[4])
 		elseif ast[1] == 'U_EXPR' then
@@ -503,15 +520,15 @@ function vsl_format.build_code(in_ast, context)
 			end
 		end
 
-		local allow_raw_call, data, value = context.builtin(
-			function(message) ast_error(ast, message) end,
-			ast[2],
-			args
-		)
-
-		if allow_raw_call then
+		local func = context.builtin[ast[2]]
+		if func == nil then
 			return ast[2] .. '(' .. table.concat(args, ', ') .. ')'
 		end
+
+		local data, value = func(
+			function(message) ast_error(ast, message) end,
+			args
+		)
 
 		if data ~= nil then
 			pre_data[data] = true
@@ -631,7 +648,6 @@ function vsl_format.parse(reader)
 			end
 
 			local result = { 'C_EXPR', a; pos = a.pos }
-
 			if n_expr[1] == 'C_EXPR' then
 				for i=2,#n_expr do
 					result[#result + 1] = n_expr[i]
@@ -661,7 +677,7 @@ function vsl_format.parse(reader)
 				reader.next()
 				if reader.value() == '=' then
 					reader.next()
-					result[#result + 1] = expression(true)
+					table.insert(result, expression(true))
 					return result
 				elseif reader.value() == ',' then
 					reader.next()
@@ -700,23 +716,23 @@ function vsl_format.parse(reader)
 			local r_value = reader.value()
 			local r_type = reader.type()
 			if r_value == 'local' then
-				result[#result + 1] = statement_local()
+				table.insert(result, statement_local())
 			elseif r_value == 'if' then
-				result[#result + 1] = statement_if()
+				table.insert(result, statement_if())
 			elseif r_type == 'name' then
 				-- Only assignements or calls are allowed
 
 				reader.next()
 				if reader.value() == '=' then
 					reader.next()
-					result[#result + 1] = { 'SET', r_value, expression(false); pos = pos }
+					table.insert(result, { 'SET', r_value, expression(false); pos = pos })
 				elseif reader.value() == '(' then
 					reader.next()
 					local expr = expression(true)
 					if expr[1] ~= 'C_EXPR' then
 						expr = { 'C_EXPR', expr; pos = expr.pos }
 					end
-					result[#result + 1] = { 'CALL', r_value, expr; pos = pos }
+					table.insert(result, { 'CALL', r_value, expr; pos = pos })
 					reader.require_value(')')
 				else
 					reader.error("Invalid symbol '%s'", r_value)
@@ -729,7 +745,6 @@ function vsl_format.parse(reader)
 
 	local result = statement_list()
 	if reader.hasMore() then
-		ccemux.setClipboard(textutils.serialize(result))
 		reader.error('Did not parse correctly')
 	end
 

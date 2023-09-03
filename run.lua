@@ -1,10 +1,6 @@
 local h3d   = require 'h3d'
 local bench = require '../eval/benchmark/generator/triangle_generator'
 
--- vsl
-
--- xyzw <-> rgba
-
 local raster, geometry = h3d.create_pipeline({
 	vertex_attributes = {
 		{ name = 'position', count = 3, position = true },
@@ -12,16 +8,30 @@ local raster, geometry = h3d.create_pipeline({
 		{ name = 'uv',       count = 2 },
 --		{ name = 'color',    count = 3 },
 --		{ name = 'normal',   count = 3 },
+
+--		position = { count = 3, position = true },
+--		uv       = { count = 2 },
+--		color    = { count = 3 },
+--		normal   = { count = 3 },
 	},
 	face_attributes = {
 		{ name = 'color',      count = 1 },
+
+--		color = { count = 1 },
 	},
 	layers = {
 		'color',
 		'depth'
 	},
-	frag_shader = --"gl_set_layer('color', gl_face('color'))" --[[
-[[		if gl_layer('depth') > gl_depth then
+	frag_shader =
+--[[]]
+[[gl_set_layer('color', gl_face('color'))]]
+--[[
+	local a = gl_vertex('position', 0)
+	local b = gl_vertex('position', 2)
+]]
+--[[		
+		if gl_layer('depth') > gl_depth then
 			gl_set_layer('depth', gl_depth)
 			local cc = gl_tex(gl_vertex('uv', 0), gl_vertex('uv', 1))
 			-- local cc = gl_rgb(gl_vertex('color', 0), gl_vertex('color', 1), gl_vertex('color', 2))
@@ -29,8 +39,6 @@ local raster, geometry = h3d.create_pipeline({
 		end
 ]]
 })
-
--- raster.bind_texture(TEX_BIG, 0)
 
 local TEX_BIG = h3d.load_image('cube.bin')
 local TEX_DBG = h3d.load_image('debug.bin')
@@ -411,7 +419,7 @@ local function render_benchmark()
 	raster_clear()
 	term.drawPixels(1, 1, 0, w, h)
 
-	local count = 100000
+	local count = 300000
 	local t0 = os.clock()
 
 	math.randomseed(0)

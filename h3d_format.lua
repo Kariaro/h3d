@@ -9,7 +9,7 @@ local h3d_format = {}
 --- @param callback    function?  callback function for pre and gen stages
 ---
 --- @return any parsed the parsed output of the input source
-function h3d_format.template(source, environment, callback)
+function h3d_format.process(source, environment, callback)
 	local function quote(text)
 		return '\'' .. text:gsub('[\\\'\"\n\t]', { ['\\'] = '\\\\', ['\''] = '\\\'', ['\"'] = '\\\"', ['\n'] = '\\n', ['\t'] = '\\t' }) .. '\''
 	end
