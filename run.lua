@@ -9,8 +9,8 @@ local raster, geometry = h3d.create_pipeline({
 	vertex_attributes = {
 		{ name = 'position', count = 3, position = true },
 
-		{ name = 'uv',       count = 2 },
-		{ name = 'color',    count = 3 },
+--		{ name = 'uv',       count = 2 },
+--		{ name = 'color',    count = 3 },
 --		{ name = 'normal',   count = 3 },
 	},
 	face_attributes = {
@@ -19,7 +19,7 @@ local raster, geometry = h3d.create_pipeline({
 	layers = {
 		'depth'
 	},
-	frag_shader = [[
+	frag_shader = "gl_color(gl_face('color'))" --[[
 		if gl_layer('depth') > gl_depth then
 			gl_set_layer('depth', gl_depth)
 			local cc = gl_tex(gl_vertex('uv', 0), gl_vertex('uv', 1))
@@ -220,6 +220,7 @@ local function draw_cube(x, y, z, rx, ry, rz, near, gr, cx, cy, cz)
 			.vertex('color', v3.r, v3.g, v3.b)
 			.vertex('uv', v1.u, v1.v)
 			.vertex('uv', v2.u, v2.v)
+			.vertex('uv', v3.u, v3.v)
 			.face('color', C)
 		-- print()
 		-- print(v1.r, v1.g, v1.b, '  ', v1.x, v1.y, v1.z)
@@ -416,7 +417,7 @@ local function render_benchmark()
 	raster_clear()
 	term.drawPixels(1, 1, 0, w, h)
 
-	local count = 100
+	local count = 100000
 	local t0 = os.clock()
 
 	math.randomseed(0)
@@ -452,10 +453,9 @@ local function render_benchmark()
 		if i % 2000 == 0 then
 			os.sleep(0)
 		end
-
-		raster.renderTriangleCulling(geometry.build(), 0.01)
 	end
 	local t2 = os.clock()
+	raster.renderTriangleCulling(geometry.build(), 0.01)
 
 	local r_pixels, _ = raster.get_rastered_info()
 	print('pixels ' .. r_pixels)
@@ -516,7 +516,7 @@ end
 
 -- render_benchmark
 -- Make sure we reset
-local _, err = xpcall(key_press, function(...)
+local _, err = xpcall(render_benchmark, function(...)
 	print(...)
 	print(debug.traceback())
 	term.setFrozen(false)

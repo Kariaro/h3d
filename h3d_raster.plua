@@ -362,6 +362,10 @@ local function renderTriangleInternal(
 
 {! textindent(get_parameters(), 1) !}
 )
+	local _math_floor = math.floor
+	local _math_ceil  = math.ceil
+	local _math_max   = math.max
+	local _math_min   = math.min
 {#full_function#}
 	TRIANGLES = TRIANGLES + 1
 {%
@@ -386,15 +390,15 @@ local function renderTriangleInternal(
 	end
 %}
 	-- Barycentric calculations
-	local cyx = x_max - x_min
-	local cyy = y_max - y_min
-	local czx = x_mid - x_min
-	local czy = y_mid - y_min
-	local det = 1 / (czx * cyy - cyx * czy)
+	-- local cyx = x_max - x_min
+	-- local cyy = y_max - y_min
+	-- local czx = x_mid - x_min
+	-- local czy = y_mid - y_min
+	-- local det = 1 / (czx * cyy - cyx * czy)
 
-	local tw = TEXTURE and TEXTURE.w
-	local th = TEXTURE and TEXTURE.h
-	local td = TEXTURE and TEXTURE.data
+	-- local tw = TEXTURE and TEXTURE.w
+	-- local th = TEXTURE and TEXTURE.h
+	-- local td = TEXTURE and TEXTURE.data
 
 	local y_d0 = y_mid - y_max
 	local y_d1 = y_min - y_mid
@@ -429,16 +433,6 @@ local function renderTriangleInternal(
 
 			for xx=xs,xe do
 {! textindent(FRAG_SHADER, 4) !}
-
-{% if USE_UV then %}
-				if TEXTURE ~= nil then
-					local xc = depth * (_uv_x1 * c_x + _uv_x2 * c_y + _uv_x3 * c_z)
-					local yc = depth * (_uv_y1 * c_x + _uv_y2 * c_y + _uv_y3 * c_z)
-					xc = _math_clamp(_math_floor(xc * tw), 0, tw - 1)
-					yc = _math_clamp(_math_floor(yc * th), 0, th - 1)
-					PIXELS_Y[xx] = td[xc + yc * tw + 1]
-				end
-{% end %}
 			end
 {#triangle#}
 		end
