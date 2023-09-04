@@ -14,8 +14,6 @@ function h3d_format.process(source, environment, callback)
 		return '\'' .. text:gsub('[\\\'\"\n\t]', { ['\\'] = '\\\\', ['\''] = '\\\'', ['\"'] = '\\\"', ['\n'] = '\\n', ['\t'] = '\\t' }) .. '\''
 	end
 
-	source = source:gsub('${([^}]+)}', '{!%1!}')
-
 	local lines = {}
 	lines[1] = 'local __groups = { [\'__output\'] = {} }'
 	lines[2] = 'local __output = __groups[\'__output\']'
@@ -80,6 +78,7 @@ function h3d_format.process(source, environment, callback)
 	local env = {}
 	env._G = env
 	env._VERSION = _VERSION
+	env.bit32 = bit32
 	env.assert = assert
 	env.error = error
 	env.getmetatable = getmetatable

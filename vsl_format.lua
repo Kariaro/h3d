@@ -230,12 +230,20 @@ function vsl_format.process(source, context)
 	output.frag_shader = vsl_format.build_code(ast, {
 		variable = function(ast_error, name)
 			if name == 'gl_x' then
+				local used = output.used_vertex_attributes[POSITION_ATTRIBUTE.name] or 0
+				output.used_vertex_attributes[POSITION_ATTRIBUTE.name] = bit32.bor(used, 1)
 				return '__va_' .. POSITION_ATTRIBUTE.name .. '_x', 'va_' .. POSITION_ATTRIBUTE.name .. '_x'
 			elseif name == 'gl_y' then
+				local used = output.used_vertex_attributes[POSITION_ATTRIBUTE.name] or 0
+				output.used_vertex_attributes[POSITION_ATTRIBUTE.name] = bit32.bor(used, 2)
 				return '__va_' .. POSITION_ATTRIBUTE.name .. '_y', 'va_' .. POSITION_ATTRIBUTE.name .. '_y'
 			elseif name == 'gl_z' then
+				local used = output.used_vertex_attributes[POSITION_ATTRIBUTE.name] or 0
+				output.used_vertex_attributes[POSITION_ATTRIBUTE.name] = bit32.bor(used, 4)
 				return '__va_' .. POSITION_ATTRIBUTE.name .. '_z', 'va_' .. POSITION_ATTRIBUTE.name .. '_z'
 			elseif name == 'gl_depth' then
+				local used = output.used_vertex_attributes[POSITION_ATTRIBUTE.name] or 0
+				output.used_vertex_attributes[POSITION_ATTRIBUTE.name] = bit32.bor(used, 4)
 				return '__va', 'depth'
 			end
 			return nil, nil
@@ -269,7 +277,7 @@ function vsl_format.process(source, context)
 					output.used_face_attributes[data] = bit32.bor(used, 1)
 				end
 
-				return nil, '_' .. attribute.name .. suffix
+				return nil, 'fa_' .. attribute.name .. suffix
 			end,
 
 			gl_vertex = function(ast_error, args)
@@ -356,10 +364,11 @@ function vsl_format.process(source, context)
 			local has_bary = false
 			for name, _ in pairs(data) do
 				if name:match('^__va') then
+					-- TODO: This won't work for gl_z
 					has_bary = true
 					if #name > 4 then
-						lines[#lines + 1] = 'local ' .. name:sub(3) .. ' = depth * ' ..
-							('({t}1 * c_x + {t}2 * c_y + {t}3 * c_z)'):gsub('{t}', name:sub(5))
+						table.insert(lines, 'local ' .. name:sub(3) .. ' = depth * ' ..
+							('({t}1 * c_x + {t}2 * c_y + {t}3 * c_z)'):gsub('{t}', name:sub(3)))
 					end
 				end
 			end
@@ -374,7 +383,7 @@ function vsl_format.process(source, context)
 					'local c_x = 1.0 - c_y - c_z',
 					'local depth = 1 / ({t}z1 * c_x + {t}z2 * c_y + {t}z3 * c_z)\n'
 				}) do
-					line = line:gsub('{t}', '_' .. POSITION_ATTRIBUTE.name .. '_')
+					line = line:gsub('{t}', 'va_' .. POSITION_ATTRIBUTE.name .. '_')
 					table.insert(lines, idx, line)
 				end
 			end

@@ -46,34 +46,22 @@ local MISSING_TEXTURE = {
 local USE_FACE_CULL  = false
 
 -- Calculated
-local function get_attribute_name_raw(attribute)
-	return '_' .. attribute.name .. '_'
-end
-local function get_attribute_name(attribute, index)
-	if attribute.count == 1 then
-		return '_' .. attribute.name
+local function get_va_attribute_name(attribute, index)
+	local result = 'va_' .. attribute.name
+	if attribute.count > 1 then
+		result = result .. '_' .. ("xyzw"):sub(index, index)
 	end
-	return get_attribute_name_raw(attribute) .. ("xyzw"):sub(index, index)
+	return result
 end
-
-local pos_attr = get_attribute_name_raw(POSITION_ATTRIBUTE)
-
-
-local function get_lines(lines)
-	local result = {}
-	for i=1,#lines do
-		local line = lines[i]
-		if type(line) == 'table' then
-			if line[2] then
-				result[#result + 1] = line[1]
-			end
-		else
-			result[#result + 1] = line
-		end
+local function get_fa_attribute_name(attribute, index)
+	local result = 'fa_' .. attribute.name
+	if attribute.count > 1 then
+		result = result .. '_' .. ("xyzw"):sub(index, index)
 	end
-
-	return table.concat(result, '\n')
+	return result
 end
+
+local pos_attr = 'va_' .. POSITION_ATTRIBUTE.name .. '_'
 
 local function textindent(text, tabs)
 	local lines = {}
@@ -219,135 +207,52 @@ local function if_sorted(variables, callback, indent)
 	return internal(matrix, perms)
 end
 
--- TODO: Find how to split the trinagles in such a case we always have them sorted
-local function triangleCases(state)
-	local function delta(t, use_a, use_b, use_c)
-		local pattern = '({t}{1} - {t}{{v}}) * m{1}{{v}} + {t}{{v}}'
-		local result =
-			(use_a ~= nil and pattern:gsub('{v}', use_a) or '{t}{1}') .. ', ' ..
-			(use_b ~= nil and pattern:gsub('{v}', use_b) or '{t}{2}') .. ', ' ..
-			(use_c ~= nil and pattern:gsub('{v}', use_c) or '{t}{3}')
-		return result:gsub('{t}', t)
-	end
+local function get_used_parameters_sort(allowed, keep_comma)
+	allowed = allowed or {}
+	keep_comma = keep_comma or false
 
-	local function delta_z(t, use_a, use_b, use_c)
-		local result =
-			(use_a ~= nil and 'near' or '{t}{1}') .. ', ' ..
-			(use_b ~= nil and 'near' or '{t}{2}') .. ', ' ..
-			(use_c ~= nil and 'near' or '{t}{3}')
-		return result:gsub('{t}', t)
-	end
-
-	local function get_variables(a, b, c)
-		local lines = {}
-		for _,v in pairs(VERTEX_ATTRIBUTES) do
-			lines[#lines + 1] = '-- ' .. v.name
-			if v.position then
-				for index=1,v.count do
-					local element = get_attribute_name(v, index)
-
-					if index == 3 then
-						lines[#lines + 1] = ', ' .. delta_z(element, a, b, c)
-					else
-						lines[#lines + 1] = ', ' .. delta(element, a, b, c)
-					end
-				end
-			else
-				for index=1,v.count do
-					local element = get_attribute_name(v, index)
-					lines[#lines + 1] = ', ' .. delta(element, a, b, c)
-				end
-			end
-		end
-		for _,v in pairs(FACE_ATTRIBUTES) do
-			lines[#lines + 1] = '-- ' .. v.name
-			for index=1,v.count do
-				local element = get_attribute_name(v, index)
-				lines[#lines + 1] = ', ' .. element
-			end
-		end
-
-		return get_lines(lines):gsub('^(.-),( .*)', '%1 %2')
-	end
-
-	local inside = 0
-	local i_idx = 0
-	local o_idx = 0
-	local desc = ''
-	for i, v in ipairs(state) do
-		if i > 1 then
-			desc = desc .. ' '
-		end
-		desc = desc .. (v and i or '.')
-		inside = inside + (v and 1 or 0)
-		if v then
-			i_idx = i
-		else
-			o_idx = i
-		end
-	end
-
-	if inside == 0 then
-		return ''
-	end
-
-	local s_idx = 1
-	local out = ''
-	if inside == 1 then
-		out = get_lines({
-			'-- ' .. desc,
-			'local m{1}{2} = (near - {p}z{2}) / ({p}z{1} - {p}z{2})',
-			'local m{1}{3} = (near - {p}z{3}) / ({p}z{1} - {p}z{3})',
-			'renderTriangle(', textindent(get_variables(nil, 2, 3), 1), ')'
-		})
-		s_idx = i_idx
-	elseif inside == 2 then
-		out = get_lines({
-			'-- ' .. desc,
-			'local m{1}{2} = (near - {p}z{2}) / ({p}z{1} - {p}z{2})',
-			'local m{1}{3} = (near - {p}z{3}) / ({p}z{1} - {p}z{3})',
-			'renderTriangle(', textindent(get_variables(2, nil, nil), 1), ')',
-			'renderTriangle(', textindent(get_variables(3, 2, nil), 1), ')'
-		})
-		s_idx = o_idx
-	else
-		out = get_lines({
-			'-- ' .. desc,
-			'renderTriangle(', textindent(get_variables(nil, nil, nil), 1), ')'
-		})
-	end
-
-	return out:gsub('{1}', tostring(s_idx))
-			  :gsub('{2}', tostring(1 + (s_idx + 0) % 3))
-			  :gsub('{3}', tostring(1 + (s_idx + 1) % 3))
-			  :gsub('{p}', pos_attr)
-end
-
-local function get_parameters_sort()
 	local lines = {}
 	for _,v in pairs(VERTEX_ATTRIBUTES) do
-		lines[#lines + 1] = '-- ' .. v.name
-		for index=1,v.count do
-			local element = get_attribute_name(v, index)
-			lines[#lines + 1] = ', ' .. element .. '{1}, ' .. element .. '{2}, ' .. element .. '{3}'
+		local fields = SHADER.used_vertex_attributes[v.name] or 0
+		if allowed['position'] and v.position then
+			fields = (2 ^ v.count) - 1
+		end
+		if fields > 0 then
+			lines[#lines + 1] = '-- ' .. v.name
+			for index=1,v.count do
+				if bit32.extract(fields, index - 1) == 1 then
+					local element = get_va_attribute_name(v, index)
+					lines[#lines + 1] = ', ' .. element .. '{1}, ' .. element .. '{2}, ' .. element .. '{3}'
+				end
+			end
 		end
 	end
 	for _,v in pairs(FACE_ATTRIBUTES) do
-		lines[#lines + 1] = '-- ' .. v.name
-		for index=1,v.count do
-			local element = get_attribute_name(v, index)
-			lines[#lines + 1] = ', ' .. element
+		local fields = SHADER.used_face_attributes[v.name] or 0
+		if fields > 0 then
+			lines[#lines + 1] = '-- ' .. v.name
+			for index=1,v.count do
+				if bit32.extract(fields, index - 1) == 1 then
+					local element = get_fa_attribute_name(v, index)
+					lines[#lines + 1] = ', ' .. element
+				end
+			end
 		end
 	end
-	return table.concat(lines, '\n'):gsub('^(.-),( .*)', '%1 %2')
+	local result = table.concat(lines, '\n')
+	if not keep_comma then
+		result = result:gsub('^(.-),( .*)', '%1 %2')
+	end
+	return result
 end
 
-local function get_parameters()
-	return get_parameters_sort()
+local function get_used_parameters(allowed, keep_comma)
+	return get_used_parameters_sort(allowed, keep_comma)
 		:gsub('{1}', '1')
 		:gsub('{2}', '2')
 		:gsub('{3}', '3')
 end
+
 %}
 
 local _math_clamp = function(x, min, max)
@@ -359,9 +264,9 @@ end
 local function renderTriangleInternal(
 	y_min, y_mid, y_max,
 	x_min, x_mid, x_max,
-	x_sta, x_end,
+	x_sta, x_end
 
-{! textindent(get_parameters(), 1) !}
+{! textindent(get_used_parameters(nil, true), 1) !}
 )
 	local _math_floor = math.floor
 	local _math_ceil  = math.ceil
@@ -373,21 +278,37 @@ local function renderTriangleInternal(
 {%
 	-- Apply perspective correction on vertex attributes
 	if POSITION_ATTRIBUTE.count > 2 and #VERTEX_ATTRIBUTES > 1 then
-		for i=1,3 do
-			@insert('\t' .. pos_attr .. 'z' .. i .. ' = 1 / ' .. pos_attr .. 'z' .. i .. '\n')
+		local use_z = false
+		for _, v in pairs(VERTEX_ATTRIBUTES) do
+			local fields = SHADER.used_vertex_attributes[v.name] or 0
+			if fields > 0 then
+				use_z = true
+				break
+			end
+		end
+
+		if use_z then
+			for i=1,3 do
+				@insert('\t' .. pos_attr .. 'z' .. i .. ' = 1 / ' .. pos_attr .. 'z' .. i .. '\n')
+			end
 		end
 
 		for _, v in pairs(VERTEX_ATTRIBUTES) do
-			if not v.position then
-				@insert('\t-- ' .. v.name .. '\n')
-				for i=1,3 do
+			local fields = SHADER.used_vertex_attributes[v.name] or 0
+			if fields > 0 then
+				if not v.position then
+					@insert('\t-- ' .. v.name .. '\n')
 					for index=1,v.count do
-						local element = get_attribute_name(v, index)
-						@insert('\t' .. element .. i .. ' = ' .. element .. i .. ' * ' .. pos_attr .. 'z' .. i .. '\n')
+						if bit32.extract(fields, index - 1) == 1 then
+							for i=1,3 do
+								local element = get_va_attribute_name(v, index)
+								@insert('\t' .. element .. i .. ' = ' .. element .. i .. ' * ' .. pos_attr .. 'z' .. i .. '\n')
+							end
+						end
 					end
 				end
+				@insert('\n')
 			end
-			@insert('\n')
 		end
 	end
 %}
@@ -400,6 +321,7 @@ local function renderTriangleInternal(
 	local det = 1 / (czx * cyy - cyx * czy)
 {% end%}
 
+	-- Texture
 	local tex = TEXTURE or MISSING_TEXTURE
 	local tw = tex.w
 	local th = tex.h
@@ -463,7 +385,7 @@ local function renderTriangleInternal(
 end
 
 local function renderTriangle(
-{! textindent(get_parameters(), 1) !}
+{! textindent(get_used_parameters({ position = true }), 1) !}
 )
 	local A = W / 2.0
 	local B = H / 2.0
@@ -489,7 +411,7 @@ textindent(if_sorted({ 'sy1', 'sy2', 'sy3' }, function(state)
 		res = res .. v
 	end
 
-	local out = get_lines({
+	local out = table.concat({
 		'local x_sta = ((sx{1} - sx{3}) / (sy{1} - sy{3})) * (sy{2} - sy{1}) + sx{1}',
 		'local x_end = sx{2}',
 		'if x_sta > x_end then',
@@ -510,10 +432,10 @@ textindent(if_sorted({ 'sy1', 'sy2', 'sy3' }, function(state)
 		'renderTriangleInternal(',
 		'	sy{1}, sy{2}, sy{3},',
 		'	sx{1}, sx{2}, sx{3},',
-		'	x_sta, x_end,',
-			textindent(get_parameters_sort(), 1),
+		'	x_sta, x_end',
+			textindent(get_used_parameters_sort(nil, true), 1),
 		')'
-	})
+	}, '\n')
 
 	out = out:gsub('{1}', tostring(state[1]))
 			 :gsub('{2}', tostring(state[2]))
@@ -537,30 +459,150 @@ function raster.drawGeometry(geometry, near)
 {%
 		local idx = 0
 		for _, v in pairs(VERTEX_ATTRIBUTES) do
-			@insert('\t\t-- ' .. v.name .. '\n')
-			for i=1,3 do
-				for index=1,v.count do
-					local element = get_attribute_name(v, index)
-					local pattern = '\t\tlocal {t}{1} = geometry[i + ' .. (idx) .. ']\n'
-					@insert(pattern:gsub('{t}', element):gsub('{1}', i))
-					idx = idx + 1
-				end
+			local fields = SHADER.used_vertex_attributes[v.name] or 0
+			if v.position then
+				fields = 2 ^ v.count - 1
 			end
-			@insert('\n')
+			if fields > 0 then
+				@insert('\t\t-- ' .. v.name .. '\n')
+				for i=1,3 do
+					for index=1,v.count do
+						if bit32.extract(fields, index - 1) == 1 then
+							local element = get_va_attribute_name(v, index)
+							local pattern = '\t\tlocal {t}{1} = geometry[i + ' .. (idx + index + i * 3 - 4) .. ']\n'
+							@insert(pattern:gsub('{t}', element):gsub('{1}', i))
+						end
+					end
+				end
+				@insert('\n')
+			end
+			idx = idx + v.count * 3
 		end
 
 		for _, v in pairs(FACE_ATTRIBUTES) do
-			@insert('\t\t-- ' .. v.name .. '\n')
-			for index=1,v.count do
-				local element = get_attribute_name(v, index)
-				@insert('\t\tlocal ' .. element .. ' = geometry[i + ' .. idx .. ']' .. '\n')
-				idx = idx + 1
+			local fields = SHADER.used_face_attributes[v.name] or 0
+			if fields > 0 then
+				@insert('\t\t-- ' .. v.name .. '\n')
+				for index=1,v.count do
+					if bit32.extract(fields, index - 1) == 1 then
+						local element = get_fa_attribute_name(v, index)
+						@insert('\t\tlocal ' .. element .. ' = geometry[i + ' .. (idx + index - 1) .. ']' .. '\n')
+					end
+				end
+				@insert('\n')
 			end
-			@insert('\n')
+			idx = idx + v.count
 		end
 %}
 {!
-		textindent(if_greater({ pos_attr .. 'z1', pos_attr .. 'z2', pos_attr .. 'z3' }, 'near', triangleCases), 2)
+textindent(if_greater({ pos_attr .. 'z1', pos_attr .. 'z2', pos_attr .. 'z3' }, 'near', function(state)
+	-- TODO: Find how to split the trinagles in such a case we always have them sorted
+	local function delta(t, use_a, use_b, use_c)
+		local pattern = '({t}{1} - {t}{{v}}) * m{1}{{v}} + {t}{{v}}'
+		local result =
+			(use_a ~= nil and pattern:gsub('{v}', use_a) or '{t}{1}') .. ', ' ..
+			(use_b ~= nil and pattern:gsub('{v}', use_b) or '{t}{2}') .. ', ' ..
+			(use_c ~= nil and pattern:gsub('{v}', use_c) or '{t}{3}')
+		return result:gsub('{t}', t)
+	end
+
+	local function delta_z(t, use_a, use_b, use_c)
+		local result =
+			(use_a ~= nil and 'near' or '{t}{1}') .. ', ' ..
+			(use_b ~= nil and 'near' or '{t}{2}') .. ', ' ..
+			(use_c ~= nil and 'near' or '{t}{3}')
+		return result:gsub('{t}', t)
+	end
+
+	local function get_variables(a, b, c)
+		local lines = {}
+		for _,v in pairs(VERTEX_ATTRIBUTES) do
+			local fields = SHADER.used_vertex_attributes[v.name] or 0
+			if v.position then
+				fields = 2 ^ v.count - 1
+			end
+			if fields > 0 then
+				lines[#lines + 1] = '-- ' .. v.name
+				for index=1,v.count do
+					if bit32.extract(fields, index - 1) == 1 then
+						local element = get_va_attribute_name(v, index)
+						if v.position and index == 3 then
+							lines[#lines + 1] = ', ' .. delta_z(element, a, b, c)
+						else
+							lines[#lines + 1] = ', ' .. delta(element, a, b, c)
+						end
+					end
+				end
+			end
+		end
+		for _,v in pairs(FACE_ATTRIBUTES) do
+			local fields = SHADER.used_face_attributes[v.name] or 0
+			if fields > 0 then
+				lines[#lines + 1] = '-- ' .. v.name
+				for index=1,v.count do
+					if bit32.extract(fields, index - 1) == 1 then
+						local element = get_fa_attribute_name(v, index)
+						lines[#lines + 1] = ', ' .. element
+					end
+				end
+			end
+		end
+
+		return table.concat(lines, '\n'):gsub('^(.-),( .*)', '%1 %2')
+	end
+
+	local inside = 0
+	local i_idx = 0
+	local o_idx = 0
+	local desc = ''
+	for i, v in ipairs(state) do
+		if i > 1 then
+			desc = desc .. ' '
+		end
+		desc = desc .. (v and i or '.')
+		inside = inside + (v and 1 or 0)
+		if v then
+			i_idx = i
+		else
+			o_idx = i
+		end
+	end
+
+	if inside == 0 then
+		return ''
+	end
+
+	local s_idx = 1
+	local out = ''
+	if inside == 1 then
+		out = table.concat({
+			'-- ' .. desc,
+			'local m{1}{2} = (near - {p}z{2}) / ({p}z{1} - {p}z{2})',
+			'local m{1}{3} = (near - {p}z{3}) / ({p}z{1} - {p}z{3})',
+			'renderTriangle(', textindent(get_variables(nil, 2, 3), 1), ')'
+		}, '\n')
+		s_idx = i_idx
+	elseif inside == 2 then
+		out = table.concat({
+			'-- ' .. desc,
+			'local m{1}{2} = (near - {p}z{2}) / ({p}z{1} - {p}z{2})',
+			'local m{1}{3} = (near - {p}z{3}) / ({p}z{1} - {p}z{3})',
+			'renderTriangle(', textindent(get_variables(2, nil, nil), 1), ')',
+			'renderTriangle(', textindent(get_variables(3, 2, nil), 1), ')'
+		}, '\n')
+		s_idx = o_idx
+	else
+		out = table.concat({
+			'-- ' .. desc,
+			'renderTriangle(', textindent(get_variables(nil, nil, nil), 1), ')'
+		}, '\n')
+	end
+
+	return out:gsub('{1}', tostring(s_idx))
+				:gsub('{2}', tostring(1 + (s_idx + 0) % 3))
+				:gsub('{3}', tostring(1 + (s_idx + 1) % 3))
+				:gsub('{p}', pos_attr)
+end), 2)
 !}
 	end
 end
