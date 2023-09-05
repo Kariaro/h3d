@@ -6,13 +6,13 @@ local raster, geometry = h3d.create_pipeline({
 		{ name = 'position', count = 3, position = true },
 
 		{ name = 'uv',       count = 2 },
-		{ name = 'color',    count = 3 },
-		{ name = 'normal',   count = 3 },
-		{ name = 'a',        count = 3 },
-		{ name = 'b',        count = 3 },
-		{ name = 'c',        count = 3 },
-		{ name = 'd',        count = 3 },
-		{ name = 'e',        count = 3 },
+--		{ name = 'color',    count = 3 },
+--		{ name = 'normal',   count = 3 },
+--		{ name = 'a',        count = 3 },
+--		{ name = 'b',        count = 3 },
+--		{ name = 'c',        count = 3 },
+--		{ name = 'd',        count = 3 },
+--		{ name = 'e',        count = 3 },
 
 --		position = { count = 3, position = true },
 --		uv       = { count = 2 },
@@ -30,10 +30,11 @@ local raster, geometry = h3d.create_pipeline({
 	},
 	frag_shader =
 --[[]]
-[[gl_set_layer('color', gl_face('color'))]]
+--[[gl_set_layer('color', gl_face('color'))]]
 --[[
-	local a = gl_vertex('position', 0)
-	local b = gl_vertex('position', 2)
+	local a
+	a = gl_vertex('position', 0)
+	a = gl_vertex('position', 2)
 ]]
 --[[
 	if gl_layer('depth') > gl_depth then
@@ -41,13 +42,13 @@ local raster, geometry = h3d.create_pipeline({
 		gl_set_layer('color', gl_face('color'))
 	end
 ]]
---[[		
-		if gl_layer('depth') > gl_depth then
-			gl_set_layer('depth', gl_depth)
-			local cc = gl_tex(gl_vertex('uv', 0), gl_vertex('uv', 1))
-			-- local cc = gl_rgb(gl_vertex('color', 0), gl_vertex('color', 1), gl_vertex('color', 2))
-			gl_set_layer('color', cc) --gl_face('color'))
-		end
+[[
+	if gl_layer('depth') > gl_depth then
+		gl_set_layer('depth', gl_depth)
+		local cc = gl_tex(gl_vertex('uv', 0), gl_vertex('uv', 1))
+		-- local cc = gl_rgb(gl_vertex('color', 0), gl_vertex('color', 1), gl_vertex('color', 2))
+		gl_set_layer('color', cc) --gl_face('color'))
+	end
 ]]
 })
 
@@ -430,7 +431,7 @@ local function render_benchmark()
 	raster_clear()
 	term.drawPixels(1, 1, 0, w, h)
 
-	local count = 10000
+	local count = 100000
 	local t0 = os.clock()
 
 	math.randomseed(0)

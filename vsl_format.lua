@@ -240,7 +240,7 @@ function vsl_format.process(source, context)
 			elseif name == 'gl_z' then
 				local used = output.used_vertex_attributes[POSITION_ATTRIBUTE.name] or 0
 				output.used_vertex_attributes[POSITION_ATTRIBUTE.name] = bit32.bor(used, 4)
-				return '__va_' .. POSITION_ATTRIBUTE.name .. '_z', 'va_' .. POSITION_ATTRIBUTE.name .. '_z'
+				return '__va', 'depth'
 			elseif name == 'gl_depth' then
 				local used = output.used_vertex_attributes[POSITION_ATTRIBUTE.name] or 0
 				output.used_vertex_attributes[POSITION_ATTRIBUTE.name] = bit32.bor(used, 4)
@@ -364,30 +364,15 @@ function vsl_format.process(source, context)
 			local has_bary = false
 			for name, _ in pairs(data) do
 				if name:match('^__va') then
-					-- TODO: This won't work for gl_z
 					has_bary = true
 					if #name > 4 then
 						table.insert(lines, 'local ' .. name:sub(3) .. ' = depth * ' ..
-							('({t}1 * c_x + {t}2 * c_y + {t}3 * c_z)'):gsub('{t}', name:sub(3)))
+							('({t}1 + in_{t}2 * l_a + in_{t}3 * l_b)'):gsub('{t}', name:sub(3)))
 					end
 				end
 			end
 
 			output.uses_barycentric = has_bary
-
-			if has_bary then
-				for idx, line in pairs({
-					'local xxx = xx - x_min + 0.5',
-					'local c_y = (xxx * cyy - yyy * cyx) * det',
-					'local c_z = (yyy * czx - xxx * czy) * det',
-					'local c_x = 1.0 - c_y - c_z',
-					'local depth = 1 / ({t}z1 * c_x + {t}z2 * c_y + {t}z3 * c_z)\n'
-				}) do
-					line = line:gsub('{t}', 'va_' .. POSITION_ATTRIBUTE.name .. '_')
-					table.insert(lines, idx, line)
-				end
-			end
-
 			return table.concat(lines, '\n')
 		end
 	})
@@ -466,8 +451,6 @@ function vsl_format.build_code(in_ast, context)
 				function(message) ast_error(ast, message) end,
 				ast[2]
 			)
-
-			-- print(ast[2], data, value)
 
 			if data ~= nil then
 				pre_data[data] = true
@@ -659,10 +642,10 @@ function vsl_format.parse(reader)
 			local result = { 'C_EXPR', a; pos = a.pos }
 			if n_expr[1] == 'C_EXPR' then
 				for i=2,#n_expr do
-					result[#result + 1] = n_expr[i]
+					table.insert(result, n_expr[i])
 				end
 			else
-				result[#result + 1] = n_expr
+				table.insert(result, n_expr)
 			end
 
 			return result

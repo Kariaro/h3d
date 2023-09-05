@@ -310,6 +310,22 @@ local function renderTriangleInternal(
 				@insert('\n')
 			end
 		end
+
+		for _, v in pairs(VERTEX_ATTRIBUTES) do
+			local fields = SHADER.used_vertex_attributes[v.name] or 0
+			if fields > 0 then
+				@insert('\t-- ' .. v.name .. '\n')
+				for index=1,v.count do
+					if bit32.extract(fields, index - 1) == 1 then
+						for i=2,3 do
+							local element = get_va_attribute_name(v, index)
+							@insert('\tlocal in_' .. element .. i .. ' = ' .. element .. i .. ' - ' .. element .. 1 .. '\n')
+						end
+					end
+				end
+				@insert('\n')
+			end
+		end
 	end
 %}
 {% if SHADER.uses_barycentric then %}
@@ -319,6 +335,10 @@ local function renderTriangleInternal(
 	local czx = x_mid - x_min
 	local czy = y_mid - y_min
 	local det = 1 / (czx * cyy - cyx * czy)
+	cyx = cyx * det
+	cyy = cyy * det
+	czx = czx * det
+	czy = czy * det
 {% end%}
 
 	-- Texture
@@ -352,12 +372,20 @@ local function renderTriangleInternal(
 %}
 {% if SHADER.uses_barycentric then %}
 			local yyy = yb - y_min + 0.5
+			local yya = yyy * cyx
+			local yyb = yyy * czx
 {% end %}
 			xs = _math_max(xs, 1)
 			xe = _math_min(xe, W)
 			xs = _math_ceil(xs - 0.5)
 			xe = _math_ceil(xe - 0.5) - 1
 			for xx=xs,xe do
+{% if SHADER.uses_barycentric then %}
+				local xxx = xx - x_min + 0.5
+				local l_a = xxx * cyy - yya
+				local l_b = yyb - xxx * czy
+				local depth = 1 / ({!pos_attr!}z1 + in_{!pos_attr!}z2 * l_a + in_{!pos_attr!}z3 * l_b)
+{% end %}
 {! textindent(FRAG_SHADER, 4) !}
 			end
 {#triangle#}
@@ -469,7 +497,7 @@ function raster.drawGeometry(geometry, near)
 					for index=1,v.count do
 						if bit32.extract(fields, index - 1) == 1 then
 							local element = get_va_attribute_name(v, index)
-							local pattern = '\t\tlocal {t}{1} = geometry[i + ' .. (idx + index + i * 3 - 4) .. ']\n'
+							local pattern = '\t\tlocal {t}{1} = geometry[i + ' .. (idx + index + (i - 1) * v.count - 1) .. ']\n'
 							@insert(pattern:gsub('{t}', element):gsub('{1}', i))
 						end
 					end
