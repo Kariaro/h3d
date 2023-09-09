@@ -1,2 +1,2 @@
-code_gen.lua
-code_pre.lua
+code_pre*.lua
+code_gen*.lua

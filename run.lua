@@ -1,5 +1,6 @@
-local h3d   = require 'h3d'
-local bench = require '../eval/benchmark/generator/triangle_generator'
+local h3d        = require 'h3d'
+local bench      = require '../eval/benchmark/generator/triangle_generator'
+local h3d_matrix = require 'h3d_matrix'
 
 local raster, geometry = h3d.create_pipeline({
 	vertex_attributes = {
@@ -36,13 +37,14 @@ local raster, geometry = h3d.create_pipeline({
 	a = gl_vertex('position', 0)
 	a = gl_vertex('position', 2)
 ]]
---[[
+[[
 	if gl_layer('depth') > gl_depth then
 		gl_set_layer('depth', gl_depth)
 		gl_set_layer('color', gl_face('color'))
 	end
 ]]
-[[
+--[[gl_set_layer('color', gl_depth)]]
+--[[
 	if gl_layer('depth') > gl_depth then
 		gl_set_layer('depth', gl_depth)
 		local cc = gl_tex(gl_vertex('uv', 0), gl_vertex('uv', 1))
@@ -114,11 +116,8 @@ end
 
 local C = 10
 
-local function draw_cube(x, y, z, rx, ry, rz, near, gr, cx, cy, cz)
+local function draw_cube(x, y, z, gr, matrix)
 	raster.set_texture(TEX_BIG) -- TEX_BIG)
-
-	local s = -0.5
-	local e =  0.5
 
 	local xs = -0.5 + x
 	local xe =  0.5 + x
@@ -212,7 +211,7 @@ local function draw_cube(x, y, z, rx, ry, rz, near, gr, cx, cy, cz)
 		end
 	end
 
-	matrixRotate(cx or 0, cy or 0, cz or 0, rx, ry, rz, vertices)
+	-- matrixRotate(cx or 0, cy or 0, cz or 0, rx, ry, rz, vertices)
 
 	for i=1,#vertices,3 do
 		local v1 = vertices[i]
@@ -221,11 +220,11 @@ local function draw_cube(x, y, z, rx, ry, rz, near, gr, cx, cy, cz)
 		-- v1.x = v1.x + x
 		-- v2.x = v2.x + x
 		-- v3.x = v3.x + x
-		-- 
+
 		-- v1.y = v1.y + y
 		-- v2.y = v2.y + y
 		-- v3.y = v3.y + y
-		-- 
+
 		-- v1.z = v1.z + z
 		-- v2.z = v2.z + z
 		-- v3.z = v3.z + z
@@ -249,7 +248,7 @@ local function draw_cube(x, y, z, rx, ry, rz, near, gr, cx, cy, cz)
 		-- print(v3.r, v3.g, v3.b, '  ', v3.x, v3.y, v3.z)
 		-- print(v1.u, v1.v, v2.u, v2.v, v3.u, v3.v)
 
-		raster.drawGeometry(geometry.build(), near)
+		raster.drawGeometry(geometry.build(), matrix)
 	end
 end
 
@@ -269,6 +268,7 @@ local function raster_setup()
 	print(w, ',', h)
 	-- for k,v in pairs(raster) do print(k, v) end
 	raster.set_size(w, h)
+	raster.set_near(1)
 
 	for i=0,6*6*6 do
 		local r = (math.floor(i     ) % 6) / 6.0
@@ -333,6 +333,8 @@ local function render_loop()
 	local start_frame = os.clock()
 	local fps_list = {}
 
+	local matrix = h3d_matrix:new()
+
 	while true do
 		os.sleep(0)
 		if not running then
@@ -366,28 +368,31 @@ local function render_loop()
 		local y = (math.cos( index / 60.0) - 0.5) * 0.5
 		local z = -0.5 - 1
 		local e = 0
-		math.randomseed(p_z)
+		-- math.randomseed(p_z)
 
-		local near = 1
-		C = 1
-		-- draw_cube(0, 0, 0, p_rx, p_ry, p_rz, near, nil, p_x, p_y, p_z)
-
-		--[[
-		draw_cube(0, 0, 2.5, index / 10, index / 20, 0, near, {
-			'back', 'left',
-		})
-		draw_cube( 1.7, 0, 2.5, index / 2, index / 20, 0, near)
-		draw_cube(-1.2, 0, 2.5, index / 10, index / 5, index, near)
-		draw_cube(0, 0.2, 2.6, -index / 4, -index / 10, -index / 2, near)
-		]]
+		local W, H = term.getSize(2)
+		matrix
+			:identity()
+			:translate     (p_x,  p_y,  p_z )
+			:rotateLocalXYZ(p_rx, p_ry, p_rz)
+			:scale         (1, W / H, 1)
 
 		C = 1
-		local dz = (index - 500) / 10
 		for ix=1,10 do
 			for iz=1,10 do
-				draw_cube(ix - 5, 1, 2 + iz, p_rx, p_ry, p_rz, near, nil, p_x, p_y, p_z)
+				draw_cube(ix - 5, 1, 2 + iz, nil, matrix)
 			end
 		end
+
+		raster.set_near(0.01)
+		raster.drawGeometry(geometry
+			.vertex('position', -0.50, -0.25, 1)
+			.vertex('position',  0.00,  0.50, 1)
+			.vertex('position',  0.50, -0.25, 1)
+			.build()
+			,
+			matrix
+		)
 
 		term.setFrozen(true)
 		term.drawPixels(1, 1, raster.get_layer('color'))
@@ -431,11 +436,15 @@ local function render_benchmark()
 	raster_clear()
 	term.drawPixels(1, 1, 0, w, h)
 
+	raster.set_near(0.01)
+
 	local count = 100000
 	local t0 = os.clock()
 
 	math.randomseed(0)
 	local shapes = bench.generate(count, 500, 500, -250, -250)
+
+	local camera = h3d_matrix:new()
 
 	for i, v in ipairs(shapes) do
 		if i > 0 then
@@ -449,7 +458,7 @@ local function render_benchmark()
 			.face('color', C)
 			.build()
 
-		raster.drawGeometry(buffer, 0.01)
+		raster.drawGeometry(buffer, camera)
 	end
 	raster_clear()
 	raster.get_rastered_info()
@@ -469,7 +478,7 @@ local function render_benchmark()
 		end
 	end
 	local t2 = os.clock()
-	raster.drawGeometry(geometry.build(), 0.01)
+	raster.drawGeometry(geometry.build(), camera)
 
 	local info = raster.get_rastered_info()
 	print('pixels ' .. info.fragment.color)
@@ -508,21 +517,21 @@ local function key_press()
 			elseif key == keys.d then
 				ss = -1
 			elseif key == keys.space then
-				dd = 1
-			elseif key == keys.leftShift then
 				dd = -1
+			elseif key == keys.leftShift then
+				dd = 1
 			elseif key == keys.q then
-				p_rx = p_rx - rs
-			elseif key == keys.e then
-				p_rx = p_rx + rs
-			elseif key == keys.r then
-				p_ry = p_ry - rs
-			elseif key == keys.f then
 				p_ry = p_ry + rs
+			elseif key == keys.e then
+				p_ry = p_ry - rs
+			elseif key == keys.r then
+				p_rx = p_rx + rs
+			elseif key == keys.f then
+				p_rx = p_rx - rs
 			end
 
-			p_z = p_z + (ff * math.cos(math.rad(p_rx)) - ss * math.sin(math.rad(p_rx))) * ms
-			p_x = p_x + (ff * math.sin(math.rad(p_rx)) + ss * math.cos(math.rad(p_rx))) * ms
+			p_z = p_z + (ff * math.cos(math.rad(p_ry)) + ss * math.sin(math.rad(p_ry))) * ms
+			p_x = p_x - (ff * math.sin(math.rad(p_ry)) - ss * math.cos(math.rad(p_ry))) * ms
 			p_y = p_y + dd / 3.0
 		end
 	end, render_loop)
@@ -530,7 +539,7 @@ end
 
 -- render_benchmark
 -- Make sure we reset
-local _, err = xpcall(render_benchmark, function(...)
+local _, err = xpcall(key_press, function(...)
 	print(...)
 	print(debug.traceback())
 	term.setFrozen(false)

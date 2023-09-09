@@ -40,6 +40,7 @@ local MISSING_TEXTURE = {
 		185, 0, 185, 0, 185, 0, 185, 0,
 	}
 }
+local NEAR = 0.01
 
 {%
 -- Should be env variables
@@ -417,12 +418,12 @@ local function renderTriangle(
 )
 	local A = W / 2.0
 	local B = H / 2.0
-	local sx1 = A + ({!pos_attr!}x1 * H) / {!pos_attr!}z1
-	local sx2 = A + ({!pos_attr!}x2 * H) / {!pos_attr!}z2
-	local sx3 = A + ({!pos_attr!}x3 * H) / {!pos_attr!}z3
-	local sy1 = B + ({!pos_attr!}y1 * H) / {!pos_attr!}z1
-	local sy2 = B + ({!pos_attr!}y2 * H) / {!pos_attr!}z2
-	local sy3 = B + ({!pos_attr!}y3 * H) / {!pos_attr!}z3
+	local sx1 = A + ({!pos_attr!}x1 * W * 0.5) / {!pos_attr!}z1
+	local sx2 = A + ({!pos_attr!}x2 * W * 0.5) / {!pos_attr!}z2
+	local sx3 = A + ({!pos_attr!}x3 * W * 0.5) / {!pos_attr!}z3
+	local sy1 = B - ({!pos_attr!}y1 * H * 0.5) / {!pos_attr!}z1
+	local sy2 = B - ({!pos_attr!}y2 * H * 0.5) / {!pos_attr!}z2
+	local sy3 = B - ({!pos_attr!}y3 * H * 0.5) / {!pos_attr!}z3
 {% if USE_FACE_CULL then %}
 	if ((sx2 - sx1) * (sy3 - sy1) - (sx3 - sx1) * (sy2 - sy1)) < 0 then
 		return
@@ -473,7 +474,7 @@ end), 1)
 !}
 end
 
-function raster.drawGeometry(geometry, near)
+function raster.drawGeometry(geometry, matrix)
 {%
 	local face_size = 0
 	for _, v in pairs(VERTEX_ATTRIBUTES) do
@@ -521,9 +522,35 @@ function raster.drawGeometry(geometry, near)
 			end
 			idx = idx + v.count
 		end
+
+		for _, v in pairs(VERTEX_ATTRIBUTES) do
+			local fields = SHADER.used_vertex_attributes[v.name] or 0
+			if v.position then
+				@insert('\t\t-- Apply matrix to (' .. v.name .. ')\n')
+				for i=1,3 do
+					local pattern = 'matrix.m0{n} * {a} + matrix.m1{n} * {b} + matrix.m2{n} * {c} + matrix.m3{n}'
+					local data_a = {}
+					local data_b = {}
+					for index=1,v.count do
+						data_a[#data_a + 1] = get_va_attribute_name(v, index) .. i
+						data_b[#data_b + 1] = pattern
+							:gsub('{n}', index - 1)
+							:gsub('{a}', get_va_attribute_name(v, 1) .. i)
+							:gsub('{b}', get_va_attribute_name(v, 2) .. i)
+							:gsub('{c}', get_va_attribute_name(v, 3) .. i)
+					end
+					@insert('\t\t' .. table.concat(data_a, ', ') .. '\n')
+					@insert('\t\t= ' .. table.concat(data_b, '\n\t\t, ') .. '\n')
+					
+				end
+				@insert('\n')
+			end
+			idx = idx + v.count * 3
+		end
+
 %}
 {!
-textindent(if_greater({ pos_attr .. 'z1', pos_attr .. 'z2', pos_attr .. 'z3' }, 'near', function(state)
+textindent(if_greater({ pos_attr .. 'z1', pos_attr .. 'z2', pos_attr .. 'z3' }, 'NEAR', function(state)
 	-- TODO: Find how to split the trinagles in such a case we always have them sorted
 	local function delta(t, use_a, use_b, use_c)
 		local pattern = '({t}{1} - {t}{{v}}) * m{1}{{v}} + {t}{{v}}'
@@ -536,9 +563,9 @@ textindent(if_greater({ pos_attr .. 'z1', pos_attr .. 'z2', pos_attr .. 'z3' }, 
 
 	local function delta_z(t, use_a, use_b, use_c)
 		local result =
-			(use_a ~= nil and 'near' or '{t}{1}') .. ', ' ..
-			(use_b ~= nil and 'near' or '{t}{2}') .. ', ' ..
-			(use_c ~= nil and 'near' or '{t}{3}')
+			(use_a ~= nil and 'NEAR' or '{t}{1}') .. ', ' ..
+			(use_b ~= nil and 'NEAR' or '{t}{2}') .. ', ' ..
+			(use_c ~= nil and 'NEAR' or '{t}{3}')
 		return result:gsub('{t}', t)
 	end
 
@@ -605,16 +632,16 @@ textindent(if_greater({ pos_attr .. 'z1', pos_attr .. 'z2', pos_attr .. 'z3' }, 
 	if inside == 1 then
 		out = table.concat({
 			'-- ' .. desc,
-			'local m{1}{2} = (near - {p}z{2}) / ({p}z{1} - {p}z{2})',
-			'local m{1}{3} = (near - {p}z{3}) / ({p}z{1} - {p}z{3})',
+			'local m{1}{2} = (NEAR - {p}z{2}) / ({p}z{1} - {p}z{2})',
+			'local m{1}{3} = (NEAR - {p}z{3}) / ({p}z{1} - {p}z{3})',
 			'renderTriangle(', textindent(get_variables(nil, 2, 3), 1), ')'
 		}, '\n')
 		s_idx = i_idx
 	elseif inside == 2 then
 		out = table.concat({
 			'-- ' .. desc,
-			'local m{1}{2} = (near - {p}z{2}) / ({p}z{1} - {p}z{2})',
-			'local m{1}{3} = (near - {p}z{3}) / ({p}z{1} - {p}z{3})',
+			'local m{1}{2} = (NEAR - {p}z{2}) / ({p}z{1} - {p}z{2})',
+			'local m{1}{3} = (NEAR - {p}z{3}) / ({p}z{1} - {p}z{3})',
 			'renderTriangle(', textindent(get_variables(2, nil, nil), 1), ')',
 			'renderTriangle(', textindent(get_variables(3, 2, nil), 1), ')'
 		}, '\n')
@@ -674,8 +701,14 @@ function raster.set_size(w, h)
 	end
 end
 
+function raster.set_near(near)
+	NEAR = near
+	return raster
+end
+
 function raster.set_texture(texture)
 	TEXTURE = texture
+	return raster
 end
 
 function raster.get_rastered_info()
