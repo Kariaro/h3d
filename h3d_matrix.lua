@@ -21,6 +21,21 @@ function h3d_matrix:new()
 	return o
 end
 
+function h3d_matrix:__tostring()
+	local pattern =
+		'Matrix[\n' ..
+			'%.4f, %.4f, %.4f, %.4f,\n' ..
+			'%.4f, %.4f, %.4f, %.4f,\n' ..
+			'%.4f, %.4f, %.4f, %.4f\n' ..
+		']'
+
+	return string.format(pattern,
+		self.m00, self.m10, self.m20, self.m30,
+		self.m01, self.m11, self.m21, self.m31,
+		self.m02, self.m12, self.m22, self.m32
+	)
+end
+
 --- Transform this into the identity matrix
 ---
 --- @return table self
@@ -77,9 +92,9 @@ function h3d_matrix:invert(dest)
 end
 
 function h3d_matrix:translate(x, y, z)
-	self.m30 = x
-	self.m31 = y
-	self.m32 = z
+	self.m30 = self.m00 * x + self.m10 * y + self.m20 * z + self.m30
+	self.m31 = self.m01 * x + self.m11 * y + self.m21 * z + self.m31
+	self.m32 = self.m02 * x + self.m12 * y + self.m22 * z + self.m32
 	return self
 end
 
@@ -99,7 +114,7 @@ function h3d_matrix:scale(x, y, z)
 	return self
 end
 
-function h3d_matrix:rotateAroundAxis(dest, angle, x, y, z)
+function h3d_matrix:rotate(angle, x, y, z)
 	local s = math.sin(math.rad(angle))
 	local c = math.cos(math.rad(angle))
 	local C = 1.0 - c
@@ -121,19 +136,16 @@ function h3d_matrix:rotateAroundAxis(dest, angle, x, y, z)
 	local nm10 = self.m00 * rm10 + self.m10 * rm11 + self.m20 * rm12
 	local nm11 = self.m01 * rm10 + self.m11 * rm11 + self.m21 * rm12
 	local nm12 = self.m02 * rm10 + self.m12 * rm11 + self.m22 * rm12
-	dest.m20 = self.m00 * rm20 + self.m10 * rm21 + self.m20 * rm22
-	dest.m21 = self.m01 * rm20 + self.m11 * rm21 + self.m21 * rm22
-	dest.m22 = self.m02 * rm20 + self.m12 * rm21 + self.m22 * rm22
-	dest.m00 = nm00
-	dest.m01 = nm01
-	dest.m02 = nm02
-	dest.m10 = nm10
-	dest.m11 = nm11
-	dest.m12 = nm12
-	dest.m30 = self.m30
-	dest.m31 = self.m31
-	dest.m32 = self.m32
-	return dest
+	self.m20 = self.m00 * rm20 + self.m10 * rm21 + self.m20 * rm22
+	self.m21 = self.m01 * rm20 + self.m11 * rm21 + self.m21 * rm22
+	self.m22 = self.m02 * rm20 + self.m12 * rm21 + self.m22 * rm22
+	self.m00 = nm00
+	self.m01 = nm01
+	self.m02 = nm02
+	self.m10 = nm10
+	self.m11 = nm11
+	self.m12 = nm12
+	return self
 end
 
 function h3d_matrix:rotateX(dest, angle)
@@ -260,6 +272,64 @@ function h3d_matrix:rotateLocalZ(angle)
 	self.m31 = nm31
 	return self
 end
+
+function h3d_matrix:perspective(fovy, aspect, zNear, zFar)
+	local h = math.tan(math.rad(fovy) * 0.5)
+	local rm00 = 1.0 / (h * aspect)
+	local rm11 = 1.0 / h
+	local rm22
+	local rm32
+	local farInf  = zFar  == math.huge
+	local nearInf = zNear == math.huge
+	if farInf then
+		rm22 = (1.0 - 1e-6)
+		rm32 = (2.0 - 1e-6) * zNear
+	elseif nearInf then
+		rm22 = (1e-6 - 1.0)
+		rm32 = (1e-6 - 2.0) * zFar
+	else
+		rm22 = (zFar + zNear) / (zFar - zNear)
+		rm32 = (zFar + zFar ) * zNear / (zFar - zNear)
+	end
+	local nm20 = self.m20 * rm22 - self.m30
+	local nm21 = self.m21 * rm22 - self.m31
+	local nm22 = self.m22 * rm22 - self.m32
+	self.m00 = self.m00 * rm00
+	self.m01 = self.m01 * rm00
+	self.m02 = self.m02 * rm00
+	self.m10 = self.m10 * rm11
+	self.m11 = self.m11 * rm11
+	self.m12 = self.m12 * rm11
+	self.m30 = self.m20 * rm32
+	self.m31 = self.m21 * rm32
+	self.m32 = self.m22 * rm32
+	self.m20 = nm20
+	self.m21 = nm21
+	self.m22 = nm22
+	return self
+end
+
+function h3d_matrix:setPerspective(fovy, aspect, zNear, zFar)
+	local h = math.tan(math.rad(fovy) * 0.5)
+	self.m00 = 1.0 / (h * aspect)
+	self.m11 = 1.0 / h
+	local farInf  = zFar == math.huge
+	local nearInf = zNear == math.huge
+	if farInf then
+		self.m22 = 1e-6 - 1.0
+		self.m32 = (1e-6 - 2.0) * zNear
+	elseif nearInf then
+		self.m22 = 1.0 - 1e-6
+		self.m32 = (2.0 - 1e-6) * zFar
+	else
+		self.m22 = (zFar + zNear) / (zNear - zFar)
+		self.m32 = (zFar + zFar) * zFar / (zNear - zFar)
+	end
+	self.m23 = -1
+	return self
+end
+
+
 
 function h3d_matrix:rotateLocalXYZ(angleX, angleY, angleZ)
 	return self

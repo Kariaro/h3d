@@ -1,8 +1,21 @@
 local h3d        = require 'h3d'
 local bench      = require '../eval/benchmark/generator/triangle_generator'
-local h3d_matrix = require 'h3d_matrix'
+
+--[[
+local raster, geometry = h3d.create_pipeline(
+	h3d.DEFAULT_PIPELINE,
+	h3d.DEFAULT_SHADER
+)
+
+h3d.attr('position', 3, { position = true }),
+h3d.attr('uv', 2),
+h3d.attr('color', 3),
+h3d.attr('normal', 3),
+]]
 
 local raster, geometry = h3d.create_pipeline({
+	debug_files = true,
+
 	vertex_attributes = {
 		{ name = 'position', count = 3, position = true },
 
@@ -217,17 +230,6 @@ local function draw_cube(x, y, z, gr, matrix)
 		local v1 = vertices[i]
 		local v2 = vertices[i + 1]
 		local v3 = vertices[i + 2]
-		-- v1.x = v1.x + x
-		-- v2.x = v2.x + x
-		-- v3.x = v3.x + x
-
-		-- v1.y = v1.y + y
-		-- v2.y = v2.y + y
-		-- v3.y = v3.y + y
-
-		-- v1.z = v1.z + z
-		-- v2.z = v2.z + z
-		-- v3.z = v3.z + z
 
 		C = (i * 3 + C * 17 + 100) % 220
 
@@ -242,11 +244,6 @@ local function draw_cube(x, y, z, gr, matrix)
 			.vertex('uv', v2.u, v2.v)
 			.vertex('uv', v3.u, v3.v)
 			.face('color', C)
-		-- print()
-		-- print(v1.r, v1.g, v1.b, '  ', v1.x, v1.y, v1.z)
-		-- print(v2.r, v2.g, v2.b, '  ', v2.x, v2.y, v2.z)
-		-- print(v3.r, v3.g, v3.b, '  ', v3.x, v3.y, v3.z)
-		-- print(v1.u, v1.v, v2.u, v2.v, v3.u, v3.v)
 
 		raster.drawGeometry(geometry.build(), matrix)
 	end
@@ -325,15 +322,17 @@ end
 local function render_loop()
 	raster_setup()
 	raster_clear()
+	raster.set_face_culling(true)
+	raster.set_near(0.01)
 
 	local t0 = os.clock()
 
-	local index = 500
+	local index = 0
 	local frames = 0
 	local start_frame = os.clock()
 	local fps_list = {}
 
-	local matrix = h3d_matrix:new()
+	local camera = h3d.camera_matrix()
 
 	while true do
 		os.sleep(0)
@@ -360,39 +359,47 @@ local function render_loop()
 			break
 		end
 
-		local s = (os.clock() * 100)
 		raster_clear()
 
 		index = index + 1
-		local x = (math.sin(-index / 80.0) - 0.5) * 1
-		local y = (math.cos( index / 60.0) - 0.5) * 0.5
-		local z = -0.5 - 1
-		local e = 0
-		-- math.randomseed(p_z)
-
 		local W, H = term.getSize(2)
-		matrix
+		camera
 			:identity()
-			:translate     (p_x,  p_y,  p_z )
-			:rotateLocalXYZ(p_rx, p_ry, p_rz)
-			:scale         (1, W / H, 1)
+			:perspective(90, W / H, 0.00001, math.huge)
+			--:perspective(90, 1, 0.1, math.huge)
+			:rotate     (p_rx, 1, 0, 0)
+			:rotate     (p_ry, 0, 1, 0)
+			:rotate     (p_rz, 0, 0, 1)
+			:translate  (-p_x, -p_y, -p_z)
+		--	:scale         (1, W / H, 1)
+		-- print(camera)
 
 		C = 1
-		for ix=1,10 do
+		for ix=1,11 do
 			for iz=1,10 do
-				draw_cube(ix - 5, 1, 2 + iz, nil, matrix)
+				draw_cube(ix - 6, 1, 2 + iz, nil, camera)
 			end
 		end
 
-		raster.set_near(0.01)
+		draw_cube(1, 2, 2, nil, camera)
+		draw_cube(2, 3, 2, nil, camera)
+
+		raster.set_face_culling(false)
+		raster.drawGeometry(geometry
+			.vertex('position', -1, -1, 1)
+			.vertex('position',  0, -1, 1)
+			.vertex('position',  0,  0, 1)
+			.face('color', 32)
+			.build(), camera
+		)
 		raster.drawGeometry(geometry
 			.vertex('position', -0.50, -0.25, 1)
 			.vertex('position',  0.00,  0.50, 1)
 			.vertex('position',  0.50, -0.25, 1)
-			.build()
-			,
-			matrix
+			.face('color', 54)
+			.build(), camera
 		)
+		raster.set_face_culling(true)
 
 		term.setFrozen(true)
 		term.drawPixels(1, 1, raster.get_layer('color'))
@@ -420,7 +427,6 @@ local function render_loop()
 		]]
 
 		term.setFrozen(false)
-
 		frames = frames + 1
 	end
 
@@ -444,7 +450,7 @@ local function render_benchmark()
 	math.randomseed(0)
 	local shapes = bench.generate(count, 500, 500, -250, -250)
 
-	local camera = h3d_matrix:new()
+	local camera = h3d.camera_matrix()
 
 	for i, v in ipairs(shapes) do
 		if i > 0 then
@@ -530,9 +536,9 @@ local function key_press()
 				p_rx = p_rx - rs
 			end
 
-			p_z = p_z + (ff * math.cos(math.rad(p_ry)) + ss * math.sin(math.rad(p_ry))) * ms
-			p_x = p_x - (ff * math.sin(math.rad(p_ry)) - ss * math.cos(math.rad(p_ry))) * ms
-			p_y = p_y + dd / 3.0
+			p_z = p_z - (ff * math.cos(math.rad(p_ry)) + ss * math.sin(math.rad(p_ry))) * ms
+			p_x = p_x + (ff * math.sin(math.rad(p_ry)) - ss * math.cos(math.rad(p_ry))) * ms
+			p_y = p_y - dd / 3.0
 		end
 	end, render_loop)
 end

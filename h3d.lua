@@ -1,4 +1,5 @@
 local h3d_format = require 'h3d_format'
+local h3d_matrix = require 'h3d_matrix'
 local vsl_format = require 'vsl_format'
 local h3d = {}
 
@@ -50,9 +51,11 @@ function h3d.create_pipeline(data)
 		FRAG_SHADER = shader.frag_shader,
 		SHADER = shader
 	}, function(name, source)
-		local tmp = fs.open(fs.combine(shell.dir(), name .. '.lua'), 'w')
-		tmp.write(source)
-		tmp.close()
+		if data.debug_files then
+			local tmp = fs.open(fs.combine(shell.dir(), name .. '.lua'), 'w')
+			tmp.write(source)
+			tmp.close()
+		end
 	end)
 
 	return result, h3d.geometry(VERTEX_ATTRIBUTES, FACE_ATTRIBUTES)
@@ -155,6 +158,10 @@ function h3d.geometry(VERTEX_ATTRIBUTES, FACE_ATTRIBUTES)
 		return data
 	end
 	return M
+end
+
+function h3d.camera_matrix()
+	return h3d_matrix:new()
 end
 
 function h3d.load_image(name)

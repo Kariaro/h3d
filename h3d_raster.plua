@@ -41,11 +41,9 @@ local MISSING_TEXTURE = {
 	}
 }
 local NEAR = 0.01
+local USE_FACE_CULLING = false
 
 {%
--- Should be env variables
-local USE_FACE_CULL  = false
-
 -- Calculated
 local function get_va_attribute_name(attribute, index)
 	local result = 'va_' .. attribute.name
@@ -416,19 +414,17 @@ end
 local function renderTriangle(
 {! textindent(get_used_parameters({ position = true }), 1) !}
 )
-	local A = W / 2.0
-	local B = H / 2.0
-	local sx1 = A + ({!pos_attr!}x1 * W * 0.5) / {!pos_attr!}z1
-	local sx2 = A + ({!pos_attr!}x2 * W * 0.5) / {!pos_attr!}z2
-	local sx3 = A + ({!pos_attr!}x3 * W * 0.5) / {!pos_attr!}z3
-	local sy1 = B - ({!pos_attr!}y1 * H * 0.5) / {!pos_attr!}z1
-	local sy2 = B - ({!pos_attr!}y2 * H * 0.5) / {!pos_attr!}z2
-	local sy3 = B - ({!pos_attr!}y3 * H * 0.5) / {!pos_attr!}z3
-{% if USE_FACE_CULL then %}
-	if ((sx2 - sx1) * (sy3 - sy1) - (sx3 - sx1) * (sy2 - sy1)) < 0 then
+	local half_w = W * 0.5
+	local half_h = H * 0.5
+	local sx1 = half_w + ({!pos_attr!}x1 * half_w) / {!pos_attr!}z1
+	local sx2 = half_w + ({!pos_attr!}x2 * half_w) / {!pos_attr!}z2
+	local sx3 = half_w + ({!pos_attr!}x3 * half_w) / {!pos_attr!}z3
+	local sy1 = half_h - ({!pos_attr!}y1 * half_h) / {!pos_attr!}z1
+	local sy2 = half_h - ({!pos_attr!}y2 * half_h) / {!pos_attr!}z2
+	local sy3 = half_h - ({!pos_attr!}y3 * half_h) / {!pos_attr!}z3
+	if USE_FACE_CULLING and ((sx2 - sx1) * (sy3 - sy1) - (sx3 - sx1) * (sy2 - sy1)) > 0 then
 		return
 	end
-{% end %}
 
 {!
 textindent(if_sorted({ 'sy1', 'sy2', 'sy3' }, function(state)
@@ -703,6 +699,11 @@ end
 
 function raster.set_near(near)
 	NEAR = near
+	return raster
+end
+
+function raster.set_face_culling(enable)
+	USE_FACE_CULLING = enable
 	return raster
 end
 
