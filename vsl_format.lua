@@ -158,6 +158,7 @@ function vsl_format.process(source, context)
 		{ 'num',  _get("[0-9]+%.[0-9]+"), _get("[0-9]+") },
 		{ 'op',   '==', '>=', '<=', '~=', '%', '<', '>', '*', '-', '+', '/', '(', ')', '=', '.', ',' },
 		{ 'op',   'if', 'then', 'else', 'end', 'for', 'do', 'local' },
+		{ 'bool', 'true', 'false' },
 		{ 'name', _get('[a-zA-Z][a-zA-Z0-9_]*') },
 	}
 
@@ -357,6 +358,22 @@ function vsl_format.process(source, context)
 					:gsub('{x}', args[1])
 					:gsub('{y}', args[2])
 				return nil, 'td[' .. idx .. ']'
+			end,
+
+			min = function(ast_error, args)
+				return nil, '_math_min(' .. table.concat(args, ', ') .. ')'
+			end,
+
+			max = function(ast_error, args)
+				return nil, '_math_max(' .. table.concat(args, ', ') .. ')'
+			end,
+
+			floor = function(ast_error, args)
+				return nil, '_math_floor(' .. args[1] .. ')'
+			end,
+
+			ceil = function(ast_error, args)
+				return nil, '_math_ceil(' .. args[1] .. ')'
 			end
 		},
 		format_data = function(data)
@@ -470,9 +487,15 @@ function vsl_format.build_code(in_ast, context)
 		push_scope()
 		local lines = {
 			'if ' .. format_expr(ast[2]) .. ' then',
-			indent(format_statements(ast[3]), 1),
-			'end'
+			indent(format_statements(ast[3]), 1)
 		}
+
+		if ast[4] ~= nil then
+			table.insert(lines, 'else')
+			table.insert(indent(format_statements(ast[4]), 1), 'else')
+		end
+
+		table.insert(lines, 'end')
 		pop_scope()
 		return table.concat(lines, '\n')
 	end
@@ -611,7 +634,7 @@ function vsl_format.parse(reader)
 		elseif unary[r_value] then -- Then check for unary
 			reader.next()
 			return { 'U_EXPR', r_value, expression(false); pos = pos }
-		elseif r_type == 'str' or r_type == 'num' then -- Stop
+		elseif r_type == 'str' or r_type == 'num' or r_type == 'bool' then -- Stop
 			reader.next()
 			return { 'ATOM', r_value; pos = pos }
 		end
@@ -690,8 +713,13 @@ function vsl_format.parse(reader)
 		local condition = expression(false)
 		reader.require_value('then')
 		local body = statement_list()
+		local elseBody = nil
+		if reader.value() == 'else' then
+			reader.next()
+			elseBody = statement_list()
+		end
 		reader.require_value('end')
-		return { 'IF', condition, body; pos = pos }
+		return { 'IF', condition, body, elseBody; pos = pos }
 	end
 
 	statement_list = function()

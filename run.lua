@@ -50,14 +50,14 @@ local raster, geometry = h3d.create_pipeline({
 	a = gl_vertex('position', 0)
 	a = gl_vertex('position', 2)
 ]]
---[[
+[[
 	if gl_layer('depth') > gl_depth then
 		gl_set_layer('depth', gl_depth)
 		gl_set_layer('color', gl_face('color'))
 	end
 ]]
 --[[gl_set_layer('color', gl_depth)]]
-[[
+--[[
 	if gl_layer('depth') > gl_depth then
 		gl_set_layer('depth', gl_depth)
 		local cc = gl_tex(gl_vertex('uv', 0), gl_vertex('uv', 1))
