@@ -50,14 +50,14 @@ local raster, geometry = h3d.create_pipeline({
 	a = gl_vertex('position', 0)
 	a = gl_vertex('position', 2)
 ]]
-[[
+--[[
 	if gl_layer('depth') > gl_depth then
 		gl_set_layer('depth', gl_depth)
 		gl_set_layer('color', gl_face('color'))
 	end
 ]]
 --[[gl_set_layer('color', gl_depth)]]
---[[
+[[
 	if gl_layer('depth') > gl_depth then
 		gl_set_layer('depth', gl_depth)
 		local cc = gl_tex(gl_vertex('uv', 0), gl_vertex('uv', 1))
@@ -71,41 +71,6 @@ local TEX_BIG = h3d.load_image('cube.bin')
 local TEX_DBG = h3d.load_image('debug.bin')
 local TEX_FAC = h3d.load_image('pfp.bin')
 local CC_FONT = h3d.load_image('cc_font.bin')
-
-local function matrixRotate(px, py, pz, rx, ry, rz, vertices)
-	local A = math.rad(rx)
-	local B = math.rad(ry)
-	local C = math.rad(rz)
-
-	local cosf_A = math.cos(A)
-	local sinf_A = math.sin(A)
-	local cosf_B = math.cos(B)
-	local sinf_B = math.sin(B)
-	local cosf_C = math.cos(C)
-	local sinf_C = math.sin(C)
-
-	for i=1,#vertices do
-		local v = vertices[i]
-		local x = v.x + px
-		local y = v.y + py
-		local z = v.z + pz
-		local nx_A = x * cosf_A - z * sinf_A
-		--cal ny_A = y
-		local nz_A = x * sinf_A + z * cosf_A
-
-		--cal nx_B = nx_A
-		local ny_B = y * cosf_B - nz_A * sinf_B
-		local nz_B = y * sinf_B + nz_A * cosf_B
-
-		local nx_C = nx_A * cosf_C - ny_B * sinf_C
-		local ny_C = nx_A * sinf_C + ny_B * cosf_C
-		--cal nz_C = nz_B
-
-		v.x = nx_C
-		v.y = ny_C
-		v.z = nz_B
-	end
-end
 
 local function vertex(x, y, z, r, g, b, u, v)
 	return {
@@ -128,9 +93,8 @@ local function vertex(x, y, z, r, g, b, u, v)
 end
 
 local C = 10
-
 local function draw_cube(x, y, z, gr, matrix)
-	raster.set_texture(TEX_BIG) -- TEX_BIG)
+	raster.set_texture(TEX_BIG)
 
 	local xs = -0.5 + x
 	local xe =  0.5 + x
@@ -141,7 +105,6 @@ local function draw_cube(x, y, z, gr, matrix)
 
 	local m = 0
 	local groups = {
-	-- Front
 		front = {
 			vertex(xs, ys, ze,      1, 0, 0,    0.25 + m, 0.25 + m),
 			vertex(xe, ys, ze,      1, 1, 1,    0.50 - m, 0.25 + m),
@@ -150,7 +113,6 @@ local function draw_cube(x, y, z, gr, matrix)
 			vertex(xs, ye, ze,      0, 0, 0,    0.25 + m, 0.50 - m),
 			vertex(xe, ys, ze,      1, 1, 1,    0.50 - m, 0.25 + m),
 		},
-	-- Left
 		left = {
 			vertex(xs, ys, zs,      1, 1, 0,    0.00 + m, 0.25 + m),
 			vertex(xs, ys, ze,      1, 0, 1,    0.25 - m, 0.25 + m),
@@ -159,7 +121,6 @@ local function draw_cube(x, y, z, gr, matrix)
 			vertex(xs, ye, zs,      0, 0, 0,    0.00 + m, 0.50 - m),
 			vertex(xs, ys, ze,      1, 0, 0,    0.25 - m, 0.25 + m),
 		},
-	-- Right
 		right = {
 			vertex(xe, ys, ze,      1, 1, 1,    0.50 + m, 0.25 + m),
 			vertex(xe, ys, zs,      0, 0, 1,    0.75 - m, 0.25 + m),
@@ -168,7 +129,6 @@ local function draw_cube(x, y, z, gr, matrix)
 			vertex(xe, ye, ze,      0, 1, 0,    0.50 + m, 0.50 - m),
 			vertex(xe, ys, zs,      0, 0, 1,    0.75 - m, 0.25 + m),
 		},
-	-- Back
 		back = {
 			vertex(xe, ys, zs,      0, 0, 1,    0.75 + m, 0.25 + m),
 			vertex(xs, ys, zs,      0, 0, 0,    1.00 - m, 0.25 + m),
@@ -177,7 +137,6 @@ local function draw_cube(x, y, z, gr, matrix)
 			vertex(xe, ye, zs,      0, 1, 0,    0.75 + m, 0.50 - m),
 			vertex(xs, ys, zs,      0, 0, 1,    1.00 - m, 0.25 + m),
 		},
-	-- Top
 		top = {
 			vertex(xs, ys, zs,      0, 0, 0,    0.25 + m, 0.00 + m),
 			vertex(xe, ys, zs,      0, 0, 1,    0.50 - m, 0.00 + m),
@@ -194,7 +153,6 @@ local function draw_cube(x, y, z, gr, matrix)
 			vertex(xe, ys, zs,      0, 1, 1,    0.50 - m, 0.00 + m),
 			]]
 		},
-	-- Bottom
 		bottom = {
 			vertex(xs, ye, ze,      0, 0, 0,    0.25 + m, 0.50 + m),
 			vertex(xe, ye, ze,      0, 1, 0,    0.50 - m, 0.50 + m),
@@ -223,8 +181,6 @@ local function draw_cube(x, y, z, gr, matrix)
 			end
 		end
 	end
-
-	-- matrixRotate(cx or 0, cy or 0, cz or 0, rx, ry, rz, vertices)
 
 	for i=1,#vertices,3 do
 		local v1 = vertices[i]
@@ -276,7 +232,6 @@ local function raster_setup()
 
 	-- for i=0,255 do term.setPaletteColor(i, i / 255.0, i / 255.0, i / 255.0) end
 end
-
 
 local function raster_clear()
 	raster.set_layer('depth', 10000)

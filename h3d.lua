@@ -3,7 +3,120 @@ local h3d_matrix = require 'h3d_matrix'
 local vsl_format = require 'vsl_format'
 local h3d = {}
 
--- Create a new render pipeline
+
+--- Returns a geometry builder object
+--- @return H3DGeometry geometry a geometry builder object
+local function geometry(VERTEX_ATTRIBUTES, FACE_ATTRIBUTES)
+	--- @class H3DGeometry
+	--- @field private data table
+	--- @field private fa_count table
+	--- @field private va_count table
+	local M = {}
+	M.data = {}
+	M.va_count = {}
+	M.fa_count = {}
+
+	local va_attributes = {}
+	local fa_attributes = {}
+	local face_size = 0
+	for _, v in pairs(VERTEX_ATTRIBUTES) do
+		va_attributes[v.name] = {
+			count = v.count * 3,
+			index = face_size
+		}
+		face_size = face_size + v.count * 3
+	end
+	for _, v in pairs(FACE_ATTRIBUTES) do
+		fa_attributes[v.name] = {
+			count = v.count,
+			index = face_size
+		}
+		face_size = face_size + v.count
+	end
+
+	for name, _ in pairs(va_attributes) do
+		M.va_count[name] = 0
+	end
+	for name, _ in pairs(fa_attributes) do
+		M.fa_count[name] = 0
+	end
+
+	--- Add vertex data
+	--- @param name string the name of the vertex attribute
+	--- @param ... any the values added to the attribute
+	function M.vertex(name, ...)
+		local attribute = va_attributes[name]
+		if attribute == nil then
+			return M
+		end
+
+		local vd = {...}
+		local vi = attribute.index
+		local vc = attribute.count
+		local count = M.va_count[name]
+		for i=1,#vd do
+			local step = math.floor(count / vc)
+			local rest = count - step * vc
+			local idx = step * face_size + vi + 1 + rest
+			M.data[idx] = vd[i]
+			count = count + 1
+		end
+		M.va_count[name] = count
+		return M
+	end
+
+	--- Add face data
+	--- @param name string the name of the face attribute
+	--- @param ... any the values added to the attribute
+	function M.face(name, ...)
+		local attribute = fa_attributes[name]
+		if attribute == nil then
+			return M
+		end
+
+		local vd = {...}
+		local vi = attribute.index
+		local vc = attribute.count
+		local count = M.fa_count[name]
+		for i=1,#vd do
+			local step = math.floor(count / vc)
+			local rest = count - step * vc
+			local idx = step * face_size + vi + 1 + rest
+			M.data[idx] = vd[i]
+			count = count + 1
+		end
+		M.fa_count[name] = count
+		return M
+	end
+
+	--- Returns a reference to the built geometry
+	--- @return number[] buffer an array of geometry data
+	function M.build()
+		local triangles = 0
+		for name, value in pairs(va_attributes) do
+			triangles = math.max(triangles, math.floor(M.va_count[name] / value.count))
+			M.va_count[name] = 0
+		end
+		for name, value in pairs(fa_attributes) do
+			triangles = math.max(triangles, math.floor(M.fa_count[name] / value.count))
+			M.fa_count[name] = 0
+		end
+
+		local data = M.data
+		for i=1,triangles * face_size do
+			if data[i] == nil then
+				data[i] = 0
+			end
+		end
+		return data
+	end
+	return M
+end
+
+
+--- Create a new render pipeline
+--- @param data table data
+--- @return H3DRaster, H3DGeometry pipeline
 function h3d.create_pipeline(data)
 	local VERTEX_ATTRIBUTES = data.vertex_attributes or {}
 	local FACE_ATTRIBUTES   = data.face_attributes or {}
@@ -38,9 +151,7 @@ function h3d.create_pipeline(data)
 		position = POSITION_ATTRIBUTE
 	})
 
-	-- ccemux.setClipboard(textutils.serialize(shader))
-
-	print('Creating raster pipeline')
+	--- @type H3DRaster
 	local result = h3d_format.process(content, {
 		VERTEX_ATTRIBUTES  = VERTEX_ATTRIBUTES,
 		FACE_ATTRIBUTES    = FACE_ATTRIBUTES,
@@ -58,111 +169,28 @@ function h3d.create_pipeline(data)
 		end
 	end)
 
-	return result, h3d.geometry(VERTEX_ATTRIBUTES, FACE_ATTRIBUTES)
+	return result, geometry(VERTEX_ATTRIBUTES, FACE_ATTRIBUTES)
 end
 
-function h3d.geometry(VERTEX_ATTRIBUTES, FACE_ATTRIBUTES)
-	local M = {}
-	M.data = {}
-	M.va_count = {}
-	M.fa_count = {}
-
-	local va_attributes = {}
-	local fa_attributes = {}
-	local face_size = 0
-	for _, v in pairs(VERTEX_ATTRIBUTES) do
-		va_attributes[v.name] = {
-			count = v.count * 3,
-			index = face_size
-		}
-		face_size = face_size + v.count * 3
-	end
-	for _, v in pairs(FACE_ATTRIBUTES) do
-		fa_attributes[v.name] = {
-			count = v.count,
-			index = face_size
-		}
-		face_size = face_size + v.count
-	end
-
-	for name, _ in pairs(va_attributes) do
-		M.va_count[name] = 0
-	end
-	for name, _ in pairs(fa_attributes) do
-		M.fa_count[name] = 0
-	end
-
-	function M.vertex(name, ...)
-		local attribute = va_attributes[name]
-		if attribute == nil then
-			return M
-		end
-
-		local vd = {...}
-		local vi = attribute.index
-		local vc = attribute.count
-
-		-- print('Adding "va_' .. name .. '" [' .. textutils.serialize({...}, { compact=true }) .. ']')
-		local count = M.va_count[name]
-		for i=1,#vd do
-			local step = math.floor(count / vc)
-			local rest = count - step * vc
-			local idx = step * face_size + vi + 1 + rest
-			M.data[idx] = vd[i]
-			count = count + 1
-		end
-		M.va_count[name] = count
-		return M
-	end
-
-	function M.face(name, ...)
-		local attribute = fa_attributes[name]
-		if attribute == nil then
-			return M
-		end
-
-		local vd = {...}
-		local vi = attribute.index
-		local vc = attribute.count
-
-		-- print('Adding "fa_' .. name .. '" [' .. textutils.serialize({...}, { compact=true }) .. ']')
-		local count = M.fa_count[name]
-		for i=1,#vd do
-			local step = math.floor(count / vc)
-			local rest = count - step * vc
-			local idx = step * face_size + vi + 1 + rest
-			M.data[idx] = vd[i]
-			count = count + 1
-		end
-		M.fa_count[name] = count
-		return M
-	end
-
-	function M.build()
-		local triangles = 0
-		for name, value in pairs(va_attributes) do
-			triangles = math.max(triangles, math.floor(M.va_count[name] / value.count))
-			M.va_count[name] = 0
-		end
-		for name, value in pairs(fa_attributes) do
-			triangles = math.max(triangles, math.floor(M.fa_count[name] / value.count))
-			M.fa_count[name] = 0
-		end
-
-		local data = M.data
-		for i=1,triangles * face_size do
-			if data[i] == nil then
-				data[i] = 0
-			end
-		end
-		return data
-	end
-	return M
-end
-
+--- Returns a new camera matrix
+--- @return H3DMatrix
 function h3d.camera_matrix()
 	return h3d_matrix:new()
 end
+
+--- Returns a new camera matrix
+--- @param settings { fov: number, aspect: number, x: number, y: number, z: number, yaw: number, pitch: number, roll: number } the settings of the camera
+--- @return H3DMatrix
+--- @deprecated do not use
+function h3d.camera(settings)
+	return h3d_matrix:new()
+		:perspective(settings.fov, settings.aspect, 0.0001, 10000)
+		:rotate     (settings.pitch, 1, 0, 0)
+		:rotate     (settings.yaw,   0, 1, 0)
+		:rotate     (settings.roll,  0, 0, 1)
+		:translate  (-settings.x, -settings.y, -settings.z)
+end
+
 
 function h3d.load_image(name)
 	local f = fs.open('h3d/img/' .. name, 'rb')

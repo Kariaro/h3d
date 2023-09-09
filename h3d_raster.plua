@@ -4,6 +4,8 @@
 	This file cannot be directly imported and require pre processing with the
 	'h3d_format' file
 ]]
+
+--- @class H3DRaster
 local raster = {}
 
 -- Globals
@@ -201,7 +203,7 @@ local function if_sorted(variables, callback, indent)
 		for j,v in pairs(states[i]) do
 			perms[i][v] = j
 		end
-	end 
+	end
 
 	return internal(matrix, perms)
 end
@@ -338,7 +340,7 @@ local function renderTriangleInternal(
 	cyy = cyy * det
 	czx = czx * det
 	czy = czy * det
-{% end%}
+{% end %}
 
 	-- Texture
 	local tex = TEXTURE or MISSING_TEXTURE
@@ -470,6 +472,10 @@ end), 1)
 !}
 end
 
+--- Draw geometry with the raster
+--- @param geometry number[] the geometry buffer 
+--- @param matrix H3DMatrix the rotation matrix
+--- @return H3DRaster raster
 function raster.drawGeometry(geometry, matrix)
 {%
 	local face_size = 0
@@ -547,7 +553,6 @@ function raster.drawGeometry(geometry, matrix)
 %}
 {!
 textindent(if_greater({ pos_attr .. 'z1', pos_attr .. 'z2', pos_attr .. 'z3' }, 'NEAR', function(state)
-	-- TODO: Find how to split the trinagles in such a case we always have them sorted
 	local function delta(t, use_a, use_b, use_c)
 		local pattern = '({t}{1} - {t}{{v}}) * m{1}{{v}} + {t}{{v}}'
 		local result =
@@ -656,8 +661,13 @@ textindent(if_greater({ pos_attr .. 'z1', pos_attr .. 'z2', pos_attr .. 'z3' }, 
 end), 2)
 !}
 	end
+	return raster
 end
 
+--- Fill the specified layer with a value
+--- @param name string the name of the layer
+--- @param value number the value to fill with
+--- @return H3DRaster raster
 function raster.set_layer(name, value)
 	local layer = layers[name]
 	if layer == nil then
@@ -670,24 +680,32 @@ function raster.set_layer(name, value)
 			row[x] = value
 		end
 	end
+	return raster
 end
 
+--- Returns the layer with the specified name
+--- @param name string the layer name
+--- @return number[][]? layer the data of the layer
 function raster.get_layer(name)
 	return layers[name]
 end
 
-function raster.set_size(w, h)
-	W = w
-	H = h
+--- Update the dimensions of the raster
+--- @param width integer the width of the buffer
+--- @param height integer the height of the buffer
+--- @return H3DRaster raster
+function raster.set_size(width, height)
+	W = width
+	H = height
 
 	-- Resize 
-	for y=1,h do
+	for y=1,height do
 {%
 		for _, name in pairs(LAYERS) do
 			@insert('\t\tlayer_' .. name .. '[y] = {}\n')
 		end
 %}
-		for x=1,w do
+		for x=1,width do
 {%
 			for _, name in pairs(LAYERS) do
 				@insert('\t\t\tlayer_' .. name .. '[y][x] = 0\n')
@@ -695,18 +713,28 @@ function raster.set_size(w, h)
 %}
 		end
 	end
+	return raster
 end
 
+--- Set the near plane of the raster
+--- @param near number the near clipping value
+--- @return H3DRaster raster
 function raster.set_near(near)
 	NEAR = near
 	return raster
 end
 
+--- Change if geometry should be face culled or not
+--- @param enable boolean if culling should be enabled or not
+--- @return H3DRaster raster
 function raster.set_face_culling(enable)
 	USE_FACE_CULLING = enable
 	return raster
 end
 
+--- Change the currently loaded texture
+--- @param texture any a texture object
+--- @return H3DRaster raster
 function raster.set_texture(texture)
 	TEXTURE = texture
 	return raster

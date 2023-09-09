@@ -1,7 +1,10 @@
 -- 4x3 matrix
 
+--- @class H3DMatrix
 local h3d_matrix = {}
 
+--- Construct a new matrix
+--- @return H3DMatrix
 function h3d_matrix:new()
 	local o = {}
 	setmetatable(o, self)
@@ -37,8 +40,7 @@ function h3d_matrix:__tostring()
 end
 
 --- Transform this into the identity matrix
----
---- @return table self
+--- @return H3DMatrix self
 function h3d_matrix:identity()
 	self.m00 = 1
 	self.m01 = 0
@@ -55,6 +57,10 @@ function h3d_matrix:identity()
 	return self
 end
 
+
+--- Create the invert of this matrix
+--- @param dest H3DMatrix? the destination matrix
+--- @return H3DMatrix matrix the destination matrix
 function h3d_matrix:invert(dest)
 	dest = dest or h3d_matrix:new()
 	local m11m00, m10m01, m10m02 = self.m00 * self.m11, self.m01 * self.m10, self.m02 * self.m10
@@ -91,6 +97,12 @@ function h3d_matrix:invert(dest)
 	return dest
 end
 
+
+--- Translate this matrix locally
+--- @param x number the x translation
+--- @param y number the y translation
+--- @param z number the z translation
+--- @return H3DMatrix self
 function h3d_matrix:translate(x, y, z)
 	self.m30 = self.m00 * x + self.m10 * y + self.m20 * z + self.m30
 	self.m31 = self.m01 * x + self.m11 * y + self.m21 * z + self.m31
@@ -98,6 +110,12 @@ function h3d_matrix:translate(x, y, z)
 	return self
 end
 
+
+--- Scale this matrix locally
+--- @param x number the x scale
+--- @param y number the y scale
+--- @param z number the z scale
+--- @return H3DMatrix self
 function h3d_matrix:scale(x, y, z)
 	self.m00 = self.m00 * x
 	self.m01 = self.m01 * y
@@ -114,6 +132,13 @@ function h3d_matrix:scale(x, y, z)
 	return self
 end
 
+
+--- Rotate this matrix locally around an axis
+--- @param angle number the angle in degrees
+--- @param x number the x component of the axis
+--- @param y number the y component of the axis
+--- @param z number the z component of the axis
+--- @return H3DMatrix self
 function h3d_matrix:rotate(angle, x, y, z)
 	local s = math.sin(math.rad(angle))
 	local c = math.cos(math.rad(angle))
@@ -148,131 +173,37 @@ function h3d_matrix:rotate(angle, x, y, z)
 	return self
 end
 
-function h3d_matrix:rotateX(dest, angle)
-	return self:rotateAroundAxis(dest, angle, 1, 0, 0)
+
+--- Rotate this matrix locally around the x axis
+--- @param angle number the angle in degrees
+--- @return H3DMatrix self
+function h3d_matrix:rotateX(angle)
+	return self:rotate(angle, 1, 0, 0)
 end
 
-function h3d_matrix:rotateY(dest, angle)
-	return self:rotateAroundAxis(dest, angle, 0, 1, 0)
+
+--- Rotate this matrix locally around the y axis
+--- @param angle number the angle in degrees
+--- @return H3DMatrix self
+function h3d_matrix:rotateY(angle)
+	return self:rotate(angle, 0, 1, 0)
 end
 
-function h3d_matrix:rotateZ(dest, angle)
-	return self:rotateAroundAxis(dest, angle, 0, 0, 1)
+
+--- Rotate this matrix locally around the z axis
+--- @param angle number the angle in degrees
+--- @return H3DMatrix self
+function h3d_matrix:rotateZ(angle)
+	return self:rotate(angle, 0, 0, 1)
 end
 
-function h3d_matrix:rotateXYZ(angleY, angleX, angleZ)
-	local sinX = math.sin(math.rad(angleX))
-	local cosX = math.cos(math.rad(angleX))
-	local sinY = math.sin(math.rad(angleY))
-	local cosY = math.cos(math.rad(angleY))
-	local sinZ = math.sin(math.rad(angleZ))
-	local cosZ = math.cos(math.rad(angleZ))
-	local m_sinX = -sinX
-	local m_sinY = -sinY
-	local m_sinZ = -sinZ
 
-	-- rotateX
-	local nm10 = self.m10 * cosX   + self.m20 * sinX
-	local nm11 = self.m11 * cosX   + self.m21 * sinX
-	local nm12 = self.m12 * cosX   + self.m22 * sinX
-	local nm20 = self.m10 * m_sinX + self.m20 * cosX
-	local nm21 = self.m11 * m_sinX + self.m21 * cosX
-	local nm22 = self.m12 * m_sinX + self.m22 * cosX
-
-	-- rotateY
-	local nm00 = self.m00 * cosY + nm20 * m_sinY
-	local nm01 = self.m01 * cosY + nm21 * m_sinY
-	local nm02 = self.m02 * cosY + nm22 * m_sinY
-	self.m20   = self.m00 * sinY + nm20 * cosY
-	self.m21   = self.m01 * sinY + nm21 * cosY
-	self.m22 =   self.m02 * sinY + nm22 * cosY
-
-	-- rotateZ
-	self.m00 = nm00 * cosZ + nm10 * sinZ
-	self.m01 = nm01 * cosZ + nm11 * sinZ
-	self.m02 = nm02 * cosZ + nm12 * sinZ
-	self.m10 = nm00 * m_sinZ + nm10 * cosZ
-	self.m11 = nm01 * m_sinZ + nm11 * cosZ
-	self.m12 = nm02 * m_sinZ + nm12 * cosZ
-
-	self.m30 = self.m30
-	self.m31 = self.m31
-	self.m32 = self.m32
-	return self
-end
-
---- Rotate around the X axis (1, 0, 0)
---- @param angle integer how many degrees to rotate
-function h3d_matrix:rotateLocalX(angle)
-	local sin = math.sin(math.rad(angle))
-	local cos = math.cos(math.rad(angle))
-	local nm01 = cos * self.m01 - sin * self.m02
-	local nm02 = sin * self.m01 + cos * self.m02
-	local nm11 = cos * self.m11 - sin * self.m12
-	local nm12 = sin * self.m11 + cos * self.m12
-	local nm21 = cos * self.m21 - sin * self.m22
-	local nm22 = sin * self.m21 + cos * self.m22
-	local nm31 = cos * self.m31 - sin * self.m32
-	local nm32 = sin * self.m31 + cos * self.m32
-	self.m01 = nm01
-	self.m02 = nm02
-	self.m11 = nm11
-	self.m12 = nm12
-	self.m21 = nm21
-	self.m22 = nm22
-	self.m31 = nm31
-	self.m32 = nm32
-	return self
-end
-
---- Rotate around the Y axis (0, 1, 0)
---- @param angle integer how many degrees to rotate
-function h3d_matrix:rotateLocalY(angle)
-	local sin = math.sin(math.rad(angle))
-	local cos = math.cos(math.rad(angle))
-	local nm00 =  cos * self.m00 + sin * self.m02
-	local nm02 = -sin * self.m00 + cos * self.m02
-	local nm10 =  cos * self.m10 + sin * self.m12
-	local nm12 = -sin * self.m10 + cos * self.m12
-	local nm20 =  cos * self.m20 + sin * self.m22
-	local nm22 = -sin * self.m20 + cos * self.m22
-	local nm30 =  cos * self.m30 + sin * self.m32
-	local nm32 = -sin * self.m30 + cos * self.m32
-	self.m00 = nm00
-	self.m02 = nm02
-	self.m10 = nm10
-	self.m12 = nm12
-	self.m20 = nm20
-	self.m22 = nm22
-	self.m30 = nm30
-	self.m32 = nm32
-	return self
-end
-
---- Rotate around the Z axis (0, 0, 1)
---- @param angle integer how many degrees to rotate
-function h3d_matrix:rotateLocalZ(angle)
-	local sin = math.sin(math.rad(angle))
-	local cos = math.cos(math.rad(angle))
-	local nm00 = cos * self.m00 - sin * self.m01
-	local nm01 = sin * self.m00 + cos * self.m01
-	local nm10 = cos * self.m10 - sin * self.m11
-	local nm11 = sin * self.m10 + cos * self.m11
-	local nm20 = cos * self.m20 - sin * self.m21
-	local nm21 = sin * self.m20 + cos * self.m21
-	local nm30 = cos * self.m30 - sin * self.m31
-	local nm31 = sin * self.m30 + cos * self.m31
-	self.m00 = nm00
-	self.m01 = nm01
-	self.m10 = nm10
-	self.m11 = nm11
-	self.m20 = nm20
-	self.m21 = nm21
-	self.m30 = nm30
-	self.m31 = nm31
-	return self
-end
-
+--- Apply perspective to this matrix
+--- @param fovy number the angle of view vertically
+--- @param aspect number the aspect ratio of the window
+--- @param zNear number the near value
+--- @param zFar number the far value
+--- @return H3DMatrix self
 function h3d_matrix:perspective(fovy, aspect, zNear, zFar)
 	local h = math.tan(math.rad(fovy) * 0.5)
 	local rm00 = 1.0 / (h * aspect)
@@ -309,35 +240,12 @@ function h3d_matrix:perspective(fovy, aspect, zNear, zFar)
 	return self
 end
 
-function h3d_matrix:setPerspective(fovy, aspect, zNear, zFar)
-	local h = math.tan(math.rad(fovy) * 0.5)
-	self.m00 = 1.0 / (h * aspect)
-	self.m11 = 1.0 / h
-	local farInf  = zFar == math.huge
-	local nearInf = zNear == math.huge
-	if farInf then
-		self.m22 = 1e-6 - 1.0
-		self.m32 = (1e-6 - 2.0) * zNear
-	elseif nearInf then
-		self.m22 = 1.0 - 1e-6
-		self.m32 = (2.0 - 1e-6) * zFar
-	else
-		self.m22 = (zFar + zNear) / (zNear - zFar)
-		self.m32 = (zFar + zFar) * zFar / (zNear - zFar)
-	end
-	self.m23 = -1
-	return self
-end
 
-
-
-function h3d_matrix:rotateLocalXYZ(angleX, angleY, angleZ)
-	return self
-		:rotateLocalY(angleY)
-		:rotateLocalX(angleX)
-		:rotateLocalZ(angleZ)
-end
-
+--- Translate a point using this matrix
+--- @param x number the x coordinate
+--- @param y number the y coordinate
+--- @param z number the z coordinate
+--- @return number x, number y, number z the translated point
 function h3d_matrix:transfer(x, y, z)
 	local nx = self.m00 * x + self.m10 * y + self.m20 * z + self.m30
 	local ny = self.m01 * x + self.m11 * y + self.m21 * z + self.m31
