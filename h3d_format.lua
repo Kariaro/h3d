@@ -7,7 +7,6 @@ local h3d_format = {}
 --- @param source      string     the input source code
 --- @param environment table      custom environment table
 --- @param callback    function?  callback function for pre and gen stages
----
 --- @return any parsed the parsed output of the input source
 function h3d_format.process(source, environment, callback)
 	local function quote(text)
@@ -105,6 +104,7 @@ function h3d_format.process(source, environment, callback)
 		env[k] = v
 	end
 
+--- @diagnostic disable
 	local f, err = load(source, 'template_code', 't', env)
 	if not f then
 		error('Invalid code syntax: ' .. err)
@@ -134,6 +134,7 @@ function h3d_format.process(source, environment, callback)
 		print('Failed to load generated code: ' .. err)
 	end
 	return code()
+--- @diagnostic enable
 end
 
 return h3d_format

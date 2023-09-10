@@ -1,16 +1,5 @@
 local vsl_format = {}
 
-local function quote(text)
-	return '\'' .. text:gsub('[\\\'\"\n\t]', {
-		['\\'] = '\\\\',
-		['\''] = '\\\'',
-		['\"'] = '\\\"',
-		['\n'] = '\\n',
-		['\t'] = '\\t'
-	}) .. '\''
-end
-
-
 --- Split a string into tokens
 --- 
 --- @param source string a string
@@ -134,11 +123,19 @@ local function token_list(tokens)
 	return M
 end
 
+--- @class VSLContext
+--- @field vertex_attributes H3DAttribute[] An array of vertex attributes
+--- @field face_attributes H3DAttribute[] An array of face attributes
+--- @field layers string[] An array of layer names
+--- @field position H3DAttribute A position attribute
+--- @field texture H3DAttribute? A texture attribute
+--- @field color H3DAttribute? A color attribute
+--- @field debug boolean If debug data should be added
 
 --- Process the vsl code and convert it into a shader
 ---
 --- @param source string the vsl shader code
---- @param context table a table with data
+--- @param context VSLContext a table with data
 --- @return table a table containing the output
 function vsl_format.process(source, context)
 	local function _get(pattern)
@@ -176,9 +173,12 @@ function vsl_format.process(source, context)
 	]]
 
 	local POSITION_ATTRIBUTE = context.position
+	local TEXTURE_ATTRIBUTE  = context.texture
+	local COLOR_ATTRIBUTE    = context.color
 	local FACE_ATTRIBUTES    = context.face_attributes
 	local VERTEX_ATTRIBUTES  = context.vertex_attributes
 	local LAYERS             = context.layers
+	local DEBUG              = context.debug
 
 	local output = {
 		-- A list of accessed layers
@@ -230,22 +230,48 @@ function vsl_format.process(source, context)
 	local ast = vsl_format.parse(token_list(tokens))
 	output.frag_shader = vsl_format.build_code(ast, {
 		variable = function(ast_error, name)
-			if name == 'gl_x' then
-				local used = output.used_vertex_attributes[POSITION_ATTRIBUTE.name] or 0
-				output.used_vertex_attributes[POSITION_ATTRIBUTE.name] = bit32.bor(used, 1)
-				return '__va_' .. POSITION_ATTRIBUTE.name .. '_x', 'va_' .. POSITION_ATTRIBUTE.name .. '_x'
-			elseif name == 'gl_y' then
-				local used = output.used_vertex_attributes[POSITION_ATTRIBUTE.name] or 0
-				output.used_vertex_attributes[POSITION_ATTRIBUTE.name] = bit32.bor(used, 2)
-				return '__va_' .. POSITION_ATTRIBUTE.name .. '_y', 'va_' .. POSITION_ATTRIBUTE.name .. '_y'
-			elseif name == 'gl_z' then
-				local used = output.used_vertex_attributes[POSITION_ATTRIBUTE.name] or 0
-				output.used_vertex_attributes[POSITION_ATTRIBUTE.name] = bit32.bor(used, 4)
-				return '__va', 'depth'
-			elseif name == 'gl_depth' then
-				local used = output.used_vertex_attributes[POSITION_ATTRIBUTE.name] or 0
-				output.used_vertex_attributes[POSITION_ATTRIBUTE.name] = bit32.bor(used, 4)
-				return '__va', 'depth'
+			if name == 'gl_x' or name == 'gl_y' or name == 'gl_z' or name == 'gl_depth' then
+				local attribute = POSITION_ATTRIBUTE
+				if attribute == nil then
+					ast_error('No position attribute has been defined')
+				else
+					local lookup_value  = { gl_x = 1, gl_y = 2, gl_z = 4, gl_depth = 4 }
+					local lookup_suffix = { gl_x = 'x', gl_y = 'y', gl_z = 'z' }
+					local used = output.used_vertex_attributes[attribute.name] or 0
+					output.used_vertex_attributes[attribute.name] = bit32.bor(used, lookup_value[name])
+
+					if name == 'gl_z' or name == 'gl_depth' then
+						return '__va', 'depth'
+					end
+					local value = 'va_' .. attribute.name .. '_' .. lookup_suffix[name]
+					return '__' .. value, value
+				end
+			elseif name == 'gl_r' or name == 'gl_g' or name == 'gl_b' then
+				local attribute = COLOR_ATTRIBUTE
+				if attribute == nil then
+					ast_error('No color attribute has been defined')
+				else
+					local lookup_value  = { gl_r = 1, gl_g = 2, gl_b = 4 }
+					local lookup_suffix = { gl_r = 'x', gl_g = 'y', gl_b = 'z' }
+					local used = output.used_vertex_attributes[attribute.name] or 0
+					output.used_vertex_attributes[attribute.name] = bit32.bor(used, lookup_value[name])
+					local value = 'va_' .. attribute.name .. '_' .. lookup_suffix[name]
+					return '__' .. value, value
+				end
+			elseif name == 'gl_uv_x' or name == 'gl_uv_y' then
+				local attribute = TEXTURE_ATTRIBUTE
+				if attribute == nil then
+					ast_error('No texture attribute has been defined')
+				else
+					local lookup_value  = { gl_uv_x = 1, gl_uv_y = 2 }
+					local lookup_suffix = { gl_uv_x = 'x', gl_uv_y = 'y' }
+					local used = output.used_vertex_attributes[attribute.name] or 0
+					output.used_vertex_attributes[attribute.name] = bit32.bor(used, lookup_value[name])
+					local value = 'va_' .. attribute.name .. '_' .. lookup_suffix[name]
+					return '__' .. value, value
+				end
+			elseif name == 'gl_HasTexture' then
+				return nil, 'TEXTURE ~= nil'
 			end
 			return nil, nil
 		end,
@@ -260,12 +286,15 @@ function vsl_format.process(source, context)
 				local attribute = find_face_attribute(data)
 				if attribute == nil then
 					ast_error("Could not find face attribute '" .. data .. "'")
+					error()
 				end
 
 				if attribute.count > 1 and #args ~= 2 then
 					ast_error("Built in 'gl_face' requires 2 parameters")
+					error()
 				elseif #args ~= 1 then
 					ast_error("Built in 'gl_face' only has 1 parameter")
+					error()
 				end
 
 				local suffix = ''
@@ -290,6 +319,7 @@ function vsl_format.process(source, context)
 				local attribute = find_vertex_attribute(data)
 				if attribute == nil then
 					ast_error("Could not find vertex attribute '" .. data .. "'")
+					error()
 				end
 
 				local suffix = ''
@@ -340,7 +370,11 @@ function vsl_format.process(source, context)
 				end
 
 				output.used_layers[data] = true
-				return nil, 'layer_' .. data .. '_y[xx] = ' .. args[2] .. '\nlayer_' .. data .. '_write = layer_' .. data .. '_write + 1'
+				local result = 'layer_' .. data .. '_y[xx] = ' .. args[2]
+				if DEBUG then
+					result = result .. '\nlayer_' .. data .. '_write = layer_' .. data .. '_write + 1'
+				end
+				return nil, result
 			end,
 
 			gl_rgb = function(ast_error, args)
@@ -492,7 +526,7 @@ function vsl_format.build_code(in_ast, context)
 
 		if ast[4] ~= nil then
 			table.insert(lines, 'else')
-			table.insert(indent(format_statements(ast[4]), 1), 'else')
+			table.insert(lines, indent(format_statements(ast[4]), 1))
 		end
 
 		table.insert(lines, 'end')
@@ -660,6 +694,7 @@ function vsl_format.parse(reader)
 
 			if n_expr == nil then
 				reader.error('Expected expression after comma')
+				error()
 			end
 
 			local result = { 'C_EXPR', a; pos = a.pos }
@@ -740,8 +775,6 @@ function vsl_format.parse(reader)
 			elseif r_value == 'if' then
 				table.insert(result, statement_if())
 			elseif r_type == 'name' then
-				-- Only assignements or calls are allowed
-
 				reader.next()
 				if reader.value() == '=' then
 					reader.next()

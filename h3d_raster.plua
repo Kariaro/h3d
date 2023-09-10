@@ -5,8 +5,12 @@
 	'h3d_format' file
 ]]
 
---- @class H3DRaster
+{% if false then %}
+--- @class H3DRasterInternal
 local raster = {}
+{% else %}
+local raster = {}
+{% end %}
 
 -- Globals
 {%
@@ -475,7 +479,7 @@ end
 --- Draw geometry with the raster
 --- @param geometry number[] the geometry buffer 
 --- @param matrix H3DMatrix the rotation matrix
---- @return H3DRaster raster
+--- @return H3DRasterInternal raster
 function raster.drawGeometry(geometry, matrix)
 {%
 	local face_size = 0
@@ -667,11 +671,11 @@ end
 --- Fill the specified layer with a value
 --- @param name string the name of the layer
 --- @param value number the value to fill with
---- @return H3DRaster raster
+--- @return H3DRasterInternal raster
 function raster.set_layer(name, value)
 	local layer = layers[name]
 	if layer == nil then
-		return
+		return raster
 	end
 
 	for y=1,H do
@@ -693,7 +697,7 @@ end
 --- Update the dimensions of the raster
 --- @param width integer the width of the buffer
 --- @param height integer the height of the buffer
---- @return H3DRaster raster
+--- @return H3DRasterInternal raster
 function raster.set_size(width, height)
 	W = width
 	H = height
@@ -718,7 +722,7 @@ end
 
 --- Set the near plane of the raster
 --- @param near number the near clipping value
---- @return H3DRaster raster
+--- @return H3DRasterInternal raster
 function raster.set_near(near)
 	NEAR = near
 	return raster
@@ -726,7 +730,7 @@ end
 
 --- Change if geometry should be face culled or not
 --- @param enable boolean if culling should be enabled or not
---- @return H3DRaster raster
+--- @return H3DRasterInternal raster
 function raster.set_face_culling(enable)
 	USE_FACE_CULLING = enable
 	return raster
@@ -734,13 +738,13 @@ end
 
 --- Change the currently loaded texture
 --- @param texture any a texture object
---- @return H3DRaster raster
+--- @return H3DRasterInternal raster
 function raster.set_texture(texture)
 	TEXTURE = texture
 	return raster
 end
 
-function raster.get_rastered_info()
+function raster.get_raster_info()
 	local result = {
 		fragment = {
 {%

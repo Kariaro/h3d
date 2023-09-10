@@ -1,42 +1,23 @@
-local h3d        = require 'h3d'
-local bench      = require '../eval/benchmark/generator/triangle_generator'
+local h3d   = require 'h3d'
+local bench = require '../eval/benchmark/generator/triangle_generator'
 
 --[[
 local raster, geometry = h3d.create_pipeline(
 	h3d.DEFAULT_PIPELINE,
 	h3d.DEFAULT_SHADER
 )
-
-h3d.attr('position', 3, { position = true }),
-h3d.attr('uv', 2),
-h3d.attr('color', 3),
-h3d.attr('normal', 3),
 ]]
 
 local raster, geometry = h3d.create_pipeline({
 	debug_files = true,
-
+	debug_statistics = true,
 	vertex_attributes = {
-		{ name = 'position', count = 3, position = true },
-
-		{ name = 'uv',       count = 2 },
---		{ name = 'color',    count = 3 },
---		{ name = 'normal',   count = 3 },
---		{ name = 'a',        count = 3 },
---		{ name = 'b',        count = 3 },
---		{ name = 'c',        count = 3 },
---		{ name = 'd',        count = 3 },
---		{ name = 'e',        count = 3 },
-
---		position = { count = 3, position = true },
---		uv       = { count = 2 },
---		color    = { count = 3 },
---		normal   = { count = 3 },
+		h3d.attr('position', 3, h3d.AttributeType.Position),
+		h3d.attr('uv', 2, h3d.AttributeType.Texture),
+		h3d.attr('color', 3),
 	},
 	face_attributes = {
-		{ name = 'color',      count = 1 },
-
---		color = { count = 1 },
+		h3d.attr('color', 1),
 	},
 	layers = {
 		'color',
@@ -45,6 +26,7 @@ local raster, geometry = h3d.create_pipeline({
 	frag_shader =
 --[[]]
 --[[gl_set_layer('color', gl_face('color'))]]
+--[[gl_set_layer('color', gl_depth)]]
 --[[
 	local a
 	a = gl_vertex('position', 0)
@@ -56,16 +38,9 @@ local raster, geometry = h3d.create_pipeline({
 		gl_set_layer('color', gl_face('color'))
 	end
 ]]
---[[gl_set_layer('color', gl_depth)]]
---[[
-	if gl_layer('depth') > gl_depth then
-		gl_set_layer('depth', gl_depth)
-		local cc = gl_tex(gl_vertex('uv', 0), gl_vertex('uv', 1))
-		-- local cc = gl_rgb(gl_vertex('color', 0), gl_vertex('color', 1), gl_vertex('color', 2))
-		gl_set_layer('color', cc) --gl_face('color'))
-	end
-]]
 })
+
+-- local raster, geometry = h3d.create_default_pipeline();
 
 local TEX_BIG = h3d.load_image('cube.bin')
 local TEX_DBG = h3d.load_image('debug.bin')
@@ -106,60 +81,60 @@ local function draw_cube(x, y, z, gr, matrix)
 	local m = 0
 	local groups = {
 		front = {
-			vertex(xs, ys, ze,      1, 0, 0,    0.25 + m, 0.25 + m),
-			vertex(xe, ys, ze,      1, 1, 1,    0.50 - m, 0.25 + m),
-			vertex(xs, ye, ze,      0, 0, 0,    0.25 + m, 0.50 - m),
-			vertex(xe, ye, ze,      0, 1, 0,    0.50 - m, 0.50 - m),
-			vertex(xs, ye, ze,      0, 0, 0,    0.25 + m, 0.50 - m),
-			vertex(xe, ys, ze,      1, 1, 1,    0.50 - m, 0.25 + m),
+			vertex(xs, ys, ze,      1, 0, 0,    0.25 + m, 0.50 - m),
+			vertex(xe, ys, ze,      1, 1, 1,    0.50 - m, 0.50 - m),
+			vertex(xs, ye, ze,      0, 0, 0,    0.25 + m, 0.25 + m),
+			vertex(xe, ye, ze,      0, 1, 0,    0.50 - m, 0.25 + m),
+			vertex(xs, ye, ze,      0, 0, 0,    0.25 + m, 0.25 + m),
+			vertex(xe, ys, ze,      1, 1, 1,    0.50 - m, 0.50 - m),
 		},
 		left = {
-			vertex(xs, ys, zs,      1, 1, 0,    0.00 + m, 0.25 + m),
-			vertex(xs, ys, ze,      1, 0, 1,    0.25 - m, 0.25 + m),
-			vertex(xs, ye, zs,      0, 1, 1,    0.00 + m, 0.50 - m),
-			vertex(xs, ye, ze,      0, 0, 0,    0.25 - m, 0.50 - m),
-			vertex(xs, ye, zs,      0, 0, 0,    0.00 + m, 0.50 - m),
-			vertex(xs, ys, ze,      1, 0, 0,    0.25 - m, 0.25 + m),
+			vertex(xs, ys, zs,      1, 1, 0,    0.00 + m, 0.50 - m),
+			vertex(xs, ys, ze,      1, 0, 1,    0.25 - m, 0.50 - m),
+			vertex(xs, ye, zs,      0, 1, 1,    0.00 + m, 0.25 + m),
+			vertex(xs, ye, ze,      0, 0, 0,    0.25 - m, 0.25 + m),
+			vertex(xs, ye, zs,      0, 0, 0,    0.00 + m, 0.25 + m),
+			vertex(xs, ys, ze,      1, 0, 0,    0.25 - m, 0.50 - m),
 		},
 		right = {
-			vertex(xe, ys, ze,      1, 1, 1,    0.50 + m, 0.25 + m),
-			vertex(xe, ys, zs,      0, 0, 1,    0.75 - m, 0.25 + m),
-			vertex(xe, ye, ze,      0, 1, 0,    0.50 + m, 0.50 - m),
-			vertex(xe, ye, zs,      0, 0, 0,    0.75 - m, 0.50 - m),
-			vertex(xe, ye, ze,      0, 1, 0,    0.50 + m, 0.50 - m),
-			vertex(xe, ys, zs,      0, 0, 1,    0.75 - m, 0.25 + m),
+			vertex(xe, ys, ze,      1, 1, 1,    0.50 + m, 0.50 - m),
+			vertex(xe, ys, zs,      0, 0, 1,    0.75 - m, 0.50 - m),
+			vertex(xe, ye, ze,      0, 1, 0,    0.50 + m, 0.25 + m),
+			vertex(xe, ye, zs,      0, 0, 0,    0.75 - m, 0.25 + m),
+			vertex(xe, ye, ze,      0, 1, 0,    0.50 + m, 0.25 + m),
+			vertex(xe, ys, zs,      0, 0, 1,    0.75 - m, 0.50 - m),
 		},
 		back = {
-			vertex(xe, ys, zs,      0, 0, 1,    0.75 + m, 0.25 + m),
-			vertex(xs, ys, zs,      0, 0, 0,    1.00 - m, 0.25 + m),
-			vertex(xe, ye, zs,      0, 0, 0,    0.75 + m, 0.50 - m),
-			vertex(xs, ye, zs,      1, 0, 0,    1.00 - m, 0.50 - m),
-			vertex(xe, ye, zs,      0, 1, 0,    0.75 + m, 0.50 - m),
-			vertex(xs, ys, zs,      0, 0, 1,    1.00 - m, 0.25 + m),
+			vertex(xe, ys, zs,      0, 0, 1,    0.75 + m, 0.50 - m),
+			vertex(xs, ys, zs,      0, 0, 0,    1.00 - m, 0.50 - m),
+			vertex(xe, ye, zs,      0, 0, 0,    0.75 + m, 0.25 + m),
+			vertex(xs, ye, zs,      1, 0, 0,    1.00 - m, 0.25 + m),
+			vertex(xe, ye, zs,      0, 1, 0,    0.75 + m, 0.25 + m),
+			vertex(xs, ys, zs,      0, 0, 1,    1.00 - m, 0.50 - m),
 		},
 		top = {
-			vertex(xs, ys, zs,      0, 0, 0,    0.25 + m, 0.00 + m),
-			vertex(xe, ys, zs,      0, 0, 1,    0.50 - m, 0.00 + m),
-			vertex(xs, ys, ze,      1, 0, 0,    0.25 + m, 0.25 - m),
-			vertex(xe, ys, ze,      1, 1, 1,    0.50 - m, 0.25 - m),
-			vertex(xs, ys, ze,      1, 0, 0,    0.25 + m, 0.25 - m),
-			vertex(xe, ys, zs,      0, 0, 1,    0.50 - m, 0.00 + m),
+			vertex(xe, ye, zs,      0, 0, 1,    0.50 - m, 0.00 + m),
+			vertex(xs, ye, zs,      0, 0, 0,    0.25 + m, 0.00 + m),
+			vertex(xs, ye, ze,      1, 0, 0,    0.25 + m, 0.25 - m),
+			vertex(xs, ye, ze,      1, 0, 0,    0.25 + m, 0.25 - m),
+			vertex(xe, ye, ze,      1, 1, 1,    0.50 - m, 0.25 - m),
+			vertex(xe, ye, zs,      0, 0, 1,    0.50 - m, 0.00 + m),
 			--[[
-			vertex(xs, ys, zs,      1, 0, 0,    0.25 + m, 0.00 + m),
-			vertex(xe, ys, zs,      0, 1, 0,    0.50 - m, 0.00 + m),
-			vertex(xs, ys, ze,      0, 0, 1,    0.25 + m, 0.25 - m),
-			vertex(xe, ys, ze,      1, 1, 0,    0.50 - m, 0.25 - m),
-			vertex(xs, ys, ze,      1, 0, 1,    0.25 + m, 0.25 - m),
-			vertex(xe, ys, zs,      0, 1, 1,    0.50 - m, 0.00 + m),
+			vertex(xe, ye, zs,      0, 1, 0,    0.50 - m, 0.00 + m),
+			vertex(xs, ye, zs,      1, 0, 0,    0.25 + m, 0.00 + m),
+			vertex(xs, ye, ze,      0, 0, 1,    0.25 + m, 0.25 - m),
+			vertex(xs, ye, ze,      1, 0, 1,    0.25 + m, 0.25 - m),
+			vertex(xe, ye, ze,      1, 1, 0,    0.50 - m, 0.25 - m),
+			vertex(xe, ye, zs,      0, 1, 1,    0.50 - m, 0.00 + m),
 			]]
 		},
 		bottom = {
-			vertex(xs, ye, ze,      0, 0, 0,    0.25 + m, 0.50 + m),
-			vertex(xe, ye, ze,      0, 1, 0,    0.50 - m, 0.50 + m),
-			vertex(xs, ye, zs,      0, 0, 0,    0.25 + m, 0.75 - m),
-			vertex(xe, ye, zs,      0, 0, 0,    0.50 - m, 0.75 - m),
-			vertex(xs, ye, zs,      0, 0, 0,    0.25 + m, 0.75 - m),
-			vertex(xe, ye, ze,      0, 1, 0,    0.50 - m, 0.50 + m),
+			vertex(xe, ys, ze,      0, 1, 0,    0.50 - m, 0.50 + m),
+			vertex(xs, ys, ze,      0, 0, 0,    0.25 + m, 0.50 + m),
+			vertex(xs, ys, zs,      0, 0, 0,    0.25 + m, 0.75 - m),
+			vertex(xs, ys, zs,      0, 0, 0,    0.25 + m, 0.75 - m),
+			vertex(xe, ys, zs,      0, 0, 0,    0.50 - m, 0.75 - m),
+			vertex(xe, ys, ze,      0, 1, 0,    0.50 - m, 0.50 + m),
 		}
 	}
 
@@ -190,15 +165,15 @@ local function draw_cube(x, y, z, gr, matrix)
 		C = (i * 3 + C * 17 + 100) % 220
 
 		geometry
-			.vertex('position', v1.x, v1.y, v1.z)
-			.vertex('position', v2.x, v2.y, v2.z)
-			.vertex('position', v3.x, v3.y, v3.z)
-			.vertex('color', v1.r, v1.g, v1.b)
-			.vertex('color', v2.r, v2.g, v2.b)
-			.vertex('color', v3.r, v3.g, v3.b)
-			.vertex('uv', v1.u, v1.v)
-			.vertex('uv', v2.u, v2.v)
-			.vertex('uv', v3.u, v3.v)
+			.position(v1.x, v1.y, v1.z)
+			.position(v2.x, v2.y, v2.z)
+			.position(v3.x, v3.y, v3.z)
+			.texture(v1.u, v1.v)
+			.texture(v2.u, v2.v)
+			.texture(v3.u, v3.v)
+			.color(v1.r, v1.g, v1.b)
+			.color(v2.r, v2.g, v2.b)
+			.color(v3.r, v3.g, v3.b)
 			.face('color', C)
 
 		raster.drawGeometry(geometry.build(), matrix)
@@ -339,6 +314,7 @@ local function render_loop()
 		draw_cube(1, 2, 2, nil, camera)
 		draw_cube(2, 3, 2, nil, camera)
 
+		raster.set_texture(nil)
 		raster.set_face_culling(false)
 		raster.drawGeometry(geometry
 			.vertex('position', -1, -1, 1)
@@ -358,7 +334,7 @@ local function render_loop()
 
 		term.setFrozen(true)
 		term.drawPixels(1, 1, raster.get_layer('color'))
-		local info = raster.get_rastered_info()
+		local info = raster.get_raster_info()
 
 		draw_text(0,  0, "fps      : " .. fps, 215, 0)
 		draw_text(0,  9, "pixels   : " .. info.fragment.color, 215, 0)
@@ -399,39 +375,38 @@ local function render_benchmark()
 
 	raster.set_near(0.01)
 
-	local count = 100000
+	local count = 10000
 	local t0 = os.clock()
 
 	math.randomseed(0)
 	local shapes = bench.generate(count, 500, 500, -250, -250)
 
 	local camera = h3d.camera_matrix()
-
 	for i, v in ipairs(shapes) do
 		if i > 0 then
 			break
 		end
 
 		local buffer = geometry
-			.vertex('position', v[1].x, v[1].y, 500)
-			.vertex('position', v[2].x, v[2].y, 500)
-			.vertex('position', v[3].x, v[3].y, 500)
+			.position(v[1].x, v[1].y, 500)
+			.position(v[2].x, v[2].y, 500)
+			.position(v[3].x, v[3].y, 500)
 			.face('color', C)
 			.build()
 
 		raster.drawGeometry(buffer, camera)
 	end
 	raster_clear()
-	raster.get_rastered_info()
+	raster.get_raster_info()
 
 	local t1 = os.clock()
 	C = 1
 	for i, v in ipairs(shapes) do
 		C = (i * 3 + C * 17 + 100) % 220
 		geometry
-			.vertex('position', v[1].x, v[1].y, 500)
-			.vertex('position', v[2].x, v[2].y, 500)
-			.vertex('position', v[3].x, v[3].y, 500)
+			.position(v[1].x, v[1].y, 500)
+			.position(v[2].x, v[2].y, 500)
+			.position(v[3].x, v[3].y, 500)
 			.face('color', C)
 
 		if i % 2000 == 0 then
@@ -441,7 +416,7 @@ local function render_benchmark()
 	local t2 = os.clock()
 	raster.drawGeometry(geometry.build(), camera)
 
-	local info = raster.get_rastered_info()
+	local info = raster.get_raster_info()
 	print('pixels ' .. info.fragment.color)
 	term.drawPixels(1, 1, raster.get_layer('color'))
 	local t3 = os.clock()

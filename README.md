@@ -8,17 +8,17 @@ This project was inspired by:
 
 # Documentation
 
-## Setup
+## Basic Setup
 First you need to create a raster and a geometry buffer
 ```lua
 local h3d = require 'h3d'
 
 local raster, geometry = h3d.create_pipeline({
 	vertex_attributes = {
-		{ name = 'position', count = 3, position = true },
+		h3d.attr('position', 3, h3d.AttributeType.Position),
 	},
 	face_attributes = {
-		{ name = 'color', count = 1 },
+		h3d.attr('color', 1),
 	},
 	layers = {
 		'color',
@@ -45,26 +45,57 @@ local camera = h3d.camera_matrix()
 After that you can render geometry
 ```lua
 raster.drawGeometry(geometry
-	.vertex('position', -1, -1, 1)
-	.vertex('position',  0, -1, 1)
-	.vertex('position',  0,  0, 1)
+	.position(-1, -1, 1)
+	.position( 0, -1, 1)
+	.position( 0,  0, 1)
 	.face('color', 32)
 	.build(), camera)
 
 raster.drawGeometry(geometry
-	.vertex('position', -0.50, -0.25, 1)
-	.vertex('position',  0.00,  0.50, 1)
-	.vertex('position',  0.50, -0.25, 1)
+	.position(-0.50, -0.25, 1)
+	.position( 0.00,  0.50, 1)
+	.position( 0.50, -0.25, 1)
 	.face('color', 54)
 	.build(), camera)
 
 term.drawPixels(1, 1, raster.get_layer('color'))
 ```
 
-## Shader
+## Attributes
+There are currently a few types of attributes
+
+### `Default`
+**Note:** *All attributes are zero indexed*
+
+For normal attributes you can access them in the shader by using `gl_vertex` and `gl_face`
+
+If the attribute only has one component you can access them using `gl_vertex / gl_face ('attribute_name')`
+
+If it has more than one component you need to specify which position you want `gl_vertex / gl_face ('attribute_name', attribute_index)`
+
+### `h3d.AttributeType.Position`
+The position attribute is required and is used to place the triangles on screen
+
+In a shader you can access the position with `gl_x`, `gl_y` and `gl_z`
+The position value can be added to a geometry builder using `geometry.position(x, y, z)`
+
+### `h3d.AttributeType.Texture`
+The texture attribute is optional and can be used to draw texture
+
+In a shader you can access the texture with `gl_uv_x`, `gl_uv_y`
+The texture can be added to a geometry builder using `geometry.texture(x, y)`
+
+### `h3d.AttributeType.Color`
+The color attribute is optional and can be used to draw colors
+
+In a shader you can access the color with `gl_r`, `gl_g`, `gl_b`
+The color can be added to a geometry builder using `geometry.color(r, g, b)`
+
+
+# Shader
 The shader can be used to create more advanced effects to scenes such as lighting
 
-### Language
+## Language
 The language is a simplified version of lua with only `if` statements,
 there are no `elseif` statements so you need to nest `else`
 
@@ -78,47 +109,68 @@ else
 end
 ```
 
-### Builtin
+## Builtin Variables
+### `gl_x`
+- Get the fragment x coordinate
 
-#### Variables
-+ `gl_x`
+### `gl_y`
+- Get the fragment y coordinate
 
-	Get the fragment x coordinate
-+ `gl_y`
+### `gl_z` / `gl_depth`
+- Get the fragment z coordinate
 
-	Get the fragment y coordinate
-+ `gl_z` / `gl_depth`
+### `gl_uv_x`
+- **Note:** *This value is only present if you added a texture attribute*
+- Get the uv x coordinate
 
-	Get the fragment z coordinate
+### `gl_uv_y`
+- **Note:** *This value is only present if you added a texture attribute*
+- Get the uv y coordinate
 
-#### Functions
-+ `gl_vertex(name, index)`
+### `gl_r`
+- **Note:** *This value is only present if you added a color attribute*
+- Get the red color value
 
-	Returns the vertex attribute with the specified name with the given index
-+ `gl_face(name, index)`
+### `gl_g`
+- **Note:** *This value is only present if you added a color attribute*
+- Get the green color value
 
-	Returns the vertex attribute with the specified name with the given index
-+ `gl_tex(u, v)`
+### `gl_b`
+- **Note:** *This value is only present if you added a color attribute*
+- Get the blue color value
 
-	Returns the texture pixel value at the specified `uv` coordinate
-+ `gl_layer(name)`
+### `gl_HasTexture`
+- Get if a texture is currently loaded
 
-	Returns the value inside the layer with the specified name
-+ `gl_set_layer(name, value)`
+## Builtin Functions
+### `gl_vertex(name, index)`
+- Returns - Number: The vertex attribute with the specified name with the given index
 
-	Set the value of a layer
-+ `min(...)`
+### `gl_face(name, index)`
+- Returns - Number: The face attribute with the specified name with the given index
 
-    Returns the minimum value
-+ `max(...)`
+### `gl_tex(u, v)`
+- Returns - Number: The texture pixel value at the specified `uv` coordinate
 
-    Returns the maximum value
-+ `floor(value)`
+### `gl_layer(name)`
+- Returns - Number: The value inside the layer with the specified name
 
-    Returns the floor value
-+ `ceil(value)`
+### `gl_set_layer(name, value)`
+- Description: Set the value of a layer
 
-    Returns the ceil value
+## Builtin Math
+### `min(...)`
+- Returns - Number: The minimum value
+
+### `max(...)`
+- Returns - Number: The maximum value
+
+### `floor(value)`
+- Returns - Integer: The floor value
+
+### `ceil(value)`
+- Returns - Integer: The ceil value
+
 
 # PLUA Format
 PreProcessed LUA files
