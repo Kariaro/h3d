@@ -142,7 +142,7 @@ end
 --- @field face_attributes H3DAttribute[] An array of attribute data
 --- @field layers string[] An array of layer names
 --- @field frag_shader string The fragment shader code
---- @field debug_statistics boolean If the pipeline should add debug statistics
+-- @field debug_statistics boolean If the pipeline should add debug statistics
 
 
 --- Create a default render pipeline that contains `position`, `uv` and `color`
@@ -184,7 +184,7 @@ function h3d.create_pipeline(data)
 	local FACE_ATTRIBUTES   = data.face_attributes or {}
 	local LAYERS            = data.layers or {}
 	local FRAG_SHADER       = data.frag_shader
-	local DEBUG_STATISTICS  = data.debug_statistics
+	local DEBUG_STATISTICS  = data.debug_statistics or false
 
 	local h = fs.open(fs.combine(shell.dir(), 'h3d_raster.plua'), 'r')
 	local content = h.readAll()
