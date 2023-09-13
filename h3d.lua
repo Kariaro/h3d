@@ -1,6 +1,6 @@
-local h3d_format = require 'h3d_format'
-local h3d_matrix = require 'h3d_matrix'
-local vsl_format = require 'vsl_format'
+local h3d_format = require 'h3d_format' --$$REMOVE
+local h3d_matrix = require 'h3d_matrix' --$$REMOVE
+local vsl_format = require 'vsl_format' --$$REMOVE
 local h3d = {}
 
 
@@ -186,9 +186,7 @@ function h3d.create_pipeline(data)
 	local FRAG_SHADER       = data.frag_shader
 	local DEBUG_STATISTICS  = data.debug_statistics or false
 
-	local h = fs.open(fs.combine(shell.dir(), 'h3d_raster.plua'), 'r')
-	local content = h.readAll()
-	h.close()
+	local h = fs.open(fs.combine(shell.dir(), 'h3d_raster.plua'), 'r') local content = h.readAll() h.close() --$$H3D_RASTER_CODE
 
 	local POSITION_ATTRIBUTE = nil
 	local TEXTURE_ATTRIBUTE  = nil
@@ -203,8 +201,14 @@ function h3d.create_pipeline(data)
 		end
 	end
 
+	for _, v in pairs(FACE_ATTRIBUTES) do
+		if v.type ~= h3d.AttributeType.Default then
+			error("Invalid face attribute '" .. v.name .. "', must be AttributeType.Default")
+		end
+	end
+
 	if POSITION_ATTRIBUTE == nil then
-		error('Pipeline does not define a position vertex attribute')
+		error("Pipeline does not define a position vertex attribute")
 	end
 
 	local shader = vsl_format.process(FRAG_SHADER, {
@@ -217,6 +221,8 @@ function h3d.create_pipeline(data)
 		debug = DEBUG_STATISTICS,
 	})
 
+	--$$H3D_SHADER_CODE
+
 	--- @type H3DRaster
 	local result = h3d_format.process(content, {
 		VERTEX_ATTRIBUTES  = VERTEX_ATTRIBUTES,
@@ -228,11 +234,11 @@ function h3d.create_pipeline(data)
 		FRAG_SHADER = shader.frag_shader,
 		SHADER = shader
 	}, function(name, source)
-		if data.debug_files then
-			local tmp = fs.open(fs.combine(shell.dir(), name .. '.lua'), 'w')
-			tmp.write(source)
-			tmp.close()
-		end
+		if data.debug_files then --$$REMOVE
+			local tmp = fs.open(fs.combine(shell.dir(), name .. '.lua'), 'w') --$$REMOVE
+			tmp.write(source)                                                 --$$REMOVE
+			tmp.close()                                                       --$$REMOVE
+		end --$$REMOVE
 	end)
 
 	return result, geometry(
@@ -270,6 +276,7 @@ end
 
 --- @enum H3DAttributeType
 h3d.AttributeType = {
+	Default  = 0,
 	Position = 1,
 	Texture  = 2,
 	Color    = 3,
@@ -278,6 +285,7 @@ h3d.AttributeType = {
 --- @class H3DAttribute
 --- @field name string The attribute name
 --- @field count integer The number of components this attribute has
+--- @field type integer The type of this attribute
 --- @field position boolean? If this is a position attribute
 --- @field texture boolean? If this is a texture attribute 
 --- @field color boolean? If this is a color attribute 
@@ -291,7 +299,8 @@ h3d.AttributeType = {
 function h3d.attr(name, count, type)
 	local attribute = {
 		name = name,
-		count = count
+		count = count,
+		type = type or h3d.AttributeType.Default
 	}
 
 	if type == nil then
@@ -331,4 +340,4 @@ function h3d.load_image(name)
 	}
 end
 
-return h3d
+return h3d --$$REMOVE

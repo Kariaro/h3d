@@ -2,13 +2,10 @@ local h3d_format = {}
 
 -- TODO: Create a system that gives accurate line / column errors for 'code_pre' and 'code_gen'
 
---- Format an input source code
----
---- @param source      string     the input source code
---- @param environment table      custom environment table
---- @param callback    function?  callback function for pre and gen stages
---- @return any parsed the parsed output of the input source
-function h3d_format.process(source, environment, callback)
+--- Construct the pre template code from a source text
+--- @param source string the input source
+--- @return string template the template string
+function h3d_format.pre_template(source)
 	local function quote(text)
 		return '\'' .. text:gsub('[\\\'\"\n\t]', { ['\\'] = '\\\\', ['\''] = '\\\'', ['\"'] = '\\\"', ['\n'] = '\\n', ['\t'] = '\\t' }) .. '\''
 	end
@@ -69,6 +66,17 @@ function h3d_format.process(source, environment, callback)
 	table.insert(lines, 'return table.concat(__output, \'\')')
 
 	source = table.concat(lines, '\n')
+	return source
+end
+
+--- Format an input source code
+---
+--- @param source      string     the input source code
+--- @param environment table      custom environment table
+--- @param callback    function?  callback function for pre and gen stages
+--- @return any parsed the parsed output of the input source
+function h3d_format.process(source, environment, callback)
+	source = h3d_format.pre_template(source) --$$REMOVE
 
 	if callback then
 		callback('code_pre', source)
@@ -128,7 +136,8 @@ function h3d_format.process(source, environment, callback)
 			print(debug.traceback())
 			print()
 			print('error:')
-			print('  ' .. (...))
+			local a = ...
+			print('  ' .. a)
 		end)
 	else
 		print('Failed to load generated code: ' .. err)
@@ -137,4 +146,4 @@ function h3d_format.process(source, environment, callback)
 --- @diagnostic enable
 end
 
-return h3d_format
+return h3d_format --$$REMOVE

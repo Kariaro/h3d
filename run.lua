@@ -1,12 +1,5 @@
-local h3d   = require 'h3d'
 local bench = require '../eval/benchmark/generator/triangle_generator'
-
---[[
-local raster, geometry = h3d.create_pipeline(
-	h3d.DEFAULT_PIPELINE,
-	h3d.DEFAULT_SHADER
-)
-]]
+local h3d = require 'h3d'
 
 local raster, geometry = h3d.create_pipeline({
 	debug_files = true,
@@ -14,7 +7,7 @@ local raster, geometry = h3d.create_pipeline({
 	vertex_attributes = {
 		h3d.attr('position', 3, h3d.AttributeType.Position),
 		h3d.attr('uv', 2, h3d.AttributeType.Texture),
-		h3d.attr('color', 3),
+		h3d.attr('color', 3, h3d.AttributeType.Color),
 	},
 	face_attributes = {
 		h3d.attr('color', 1),
@@ -27,20 +20,20 @@ local raster, geometry = h3d.create_pipeline({
 --[[]]
 --[[gl_set_layer('color', gl_face('color'))]]
 --[[gl_set_layer('color', gl_depth)]]
---[[
-	local a
-	a = gl_vertex('position', 0)
-	a = gl_vertex('position', 2)
-]]
 [[
 	if gl_layer('depth') > gl_depth then
 		gl_set_layer('depth', gl_depth)
+		-- gl_set_layer('color', gl_rgb(gl_r, gl_g, gl_b))
 		gl_set_layer('color', gl_face('color'))
 	end
 ]]
+--[[
+	if gl_layer('depth') > gl_depth then
+		gl_set_layer('depth', gl_depth)
+		gl_set_layer('color', gl_tex(gl_uv_x, gl_uv_y))
+	end
+]]
 })
-
--- local raster, geometry = h3d.create_default_pipeline();
 
 local TEX_BIG = h3d.load_image('cube.bin')
 local TEX_DBG = h3d.load_image('debug.bin')
@@ -75,66 +68,58 @@ local function draw_cube(x, y, z, gr, matrix)
 	local xe =  0.5 + x
 	local ys = -0.5 + y
 	local ye =  0.5 + y
-	local zs =  0.5 + z
-	local ze = -0.5 + z
+	local zs = -0.5 + z
+	local ze =  0.5 + z
 
 	local m = 0
 	local groups = {
 		front = {
-			vertex(xs, ys, ze,      1, 0, 0,    0.25 + m, 0.50 - m),
-			vertex(xe, ys, ze,      1, 1, 1,    0.50 - m, 0.50 - m),
-			vertex(xs, ye, ze,      0, 0, 0,    0.25 + m, 0.25 + m),
-			vertex(xe, ye, ze,      0, 1, 0,    0.50 - m, 0.25 + m),
-			vertex(xs, ye, ze,      0, 0, 0,    0.25 + m, 0.25 + m),
-			vertex(xe, ys, ze,      1, 1, 1,    0.50 - m, 0.50 - m),
+			vertex(xs, ys, zs,      1, 0, 0,    0.25 + m, 0.50 - m),
+			vertex(xe, ys, zs,      1, 1, 1,    0.50 - m, 0.50 - m),
+			vertex(xs, ye, zs,      0, 0, 0,    0.25 + m, 0.25 + m),
+			vertex(xe, ye, zs,      0, 1, 0,    0.50 - m, 0.25 + m),
+			vertex(xs, ye, zs,      0, 0, 0,    0.25 + m, 0.25 + m),
+			vertex(xe, ys, zs,      1, 1, 1,    0.50 - m, 0.50 - m),
 		},
 		left = {
-			vertex(xs, ys, zs,      1, 1, 0,    0.00 + m, 0.50 - m),
-			vertex(xs, ys, ze,      1, 0, 1,    0.25 - m, 0.50 - m),
-			vertex(xs, ye, zs,      0, 1, 1,    0.00 + m, 0.25 + m),
-			vertex(xs, ye, ze,      0, 0, 0,    0.25 - m, 0.25 + m),
-			vertex(xs, ye, zs,      0, 0, 0,    0.00 + m, 0.25 + m),
-			vertex(xs, ys, ze,      1, 0, 0,    0.25 - m, 0.50 - m),
+			vertex(xs, ys, ze,      1, 1, 0,    0.00 + m, 0.50 - m),
+			vertex(xs, ys, zs,      1, 0, 1,    0.25 - m, 0.50 - m),
+			vertex(xs, ye, ze,      0, 1, 1,    0.00 + m, 0.25 + m),
+			vertex(xs, ye, zs,      0, 0, 0,    0.25 - m, 0.25 + m),
+			vertex(xs, ye, ze,      0, 0, 0,    0.00 + m, 0.25 + m),
+			vertex(xs, ys, zs,      1, 0, 0,    0.25 - m, 0.50 - m),
 		},
 		right = {
-			vertex(xe, ys, ze,      1, 1, 1,    0.50 + m, 0.50 - m),
-			vertex(xe, ys, zs,      0, 0, 1,    0.75 - m, 0.50 - m),
-			vertex(xe, ye, ze,      0, 1, 0,    0.50 + m, 0.25 + m),
-			vertex(xe, ye, zs,      0, 0, 0,    0.75 - m, 0.25 + m),
-			vertex(xe, ye, ze,      0, 1, 0,    0.50 + m, 0.25 + m),
-			vertex(xe, ys, zs,      0, 0, 1,    0.75 - m, 0.50 - m),
+			vertex(xe, ys, zs,      1, 1, 1,    0.50 + m, 0.50 - m),
+			vertex(xe, ys, ze,      0, 0, 1,    0.75 - m, 0.50 - m),
+			vertex(xe, ye, zs,      0, 1, 0,    0.50 + m, 0.25 + m),
+			vertex(xe, ye, ze,      0, 0, 0,    0.75 - m, 0.25 + m),
+			vertex(xe, ye, zs,      0, 1, 0,    0.50 + m, 0.25 + m),
+			vertex(xe, ys, ze,      0, 0, 1,    0.75 - m, 0.50 - m),
 		},
 		back = {
-			vertex(xe, ys, zs,      0, 0, 1,    0.75 + m, 0.50 - m),
-			vertex(xs, ys, zs,      0, 0, 0,    1.00 - m, 0.50 - m),
-			vertex(xe, ye, zs,      0, 0, 0,    0.75 + m, 0.25 + m),
-			vertex(xs, ye, zs,      1, 0, 0,    1.00 - m, 0.25 + m),
-			vertex(xe, ye, zs,      0, 1, 0,    0.75 + m, 0.25 + m),
-			vertex(xs, ys, zs,      0, 0, 1,    1.00 - m, 0.50 - m),
+			vertex(xe, ys, ze,      0, 0, 1,    0.75 + m, 0.50 - m),
+			vertex(xs, ys, ze,      0, 0, 0,    1.00 - m, 0.50 - m),
+			vertex(xe, ye, ze,      0, 0, 0,    0.75 + m, 0.25 + m),
+			vertex(xs, ye, ze,      1, 0, 0,    1.00 - m, 0.25 + m),
+			vertex(xe, ye, ze,      0, 1, 0,    0.75 + m, 0.25 + m),
+			vertex(xs, ys, ze,      0, 0, 1,    1.00 - m, 0.50 - m),
 		},
 		top = {
-			vertex(xe, ye, zs,      0, 0, 1,    0.50 - m, 0.00 + m),
-			vertex(xs, ye, zs,      0, 0, 0,    0.25 + m, 0.00 + m),
-			vertex(xs, ye, ze,      1, 0, 0,    0.25 + m, 0.25 - m),
-			vertex(xs, ye, ze,      1, 0, 0,    0.25 + m, 0.25 - m),
-			vertex(xe, ye, ze,      1, 1, 1,    0.50 - m, 0.25 - m),
-			vertex(xe, ye, zs,      0, 0, 1,    0.50 - m, 0.00 + m),
-			--[[
-			vertex(xe, ye, zs,      0, 1, 0,    0.50 - m, 0.00 + m),
-			vertex(xs, ye, zs,      1, 0, 0,    0.25 + m, 0.00 + m),
-			vertex(xs, ye, ze,      0, 0, 1,    0.25 + m, 0.25 - m),
-			vertex(xs, ye, ze,      1, 0, 1,    0.25 + m, 0.25 - m),
-			vertex(xe, ye, ze,      1, 1, 0,    0.50 - m, 0.25 - m),
-			vertex(xe, ye, zs,      0, 1, 1,    0.50 - m, 0.00 + m),
-			]]
+			vertex(xe, ye, ze,      0, 0, 1,    0.50 - m, 0.00 + m),
+			vertex(xs, ye, ze,      0, 0, 0,    0.25 + m, 0.00 + m),
+			vertex(xs, ye, zs,      1, 0, 0,    0.25 + m, 0.25 - m),
+			vertex(xs, ye, zs,      1, 0, 0,    0.25 + m, 0.25 - m),
+			vertex(xe, ye, zs,      1, 1, 1,    0.50 - m, 0.25 - m),
+			vertex(xe, ye, ze,      0, 0, 1,    0.50 - m, 0.00 + m),
 		},
 		bottom = {
-			vertex(xe, ys, ze,      0, 1, 0,    0.50 - m, 0.50 + m),
-			vertex(xs, ys, ze,      0, 0, 0,    0.25 + m, 0.50 + m),
-			vertex(xs, ys, zs,      0, 0, 0,    0.25 + m, 0.75 - m),
-			vertex(xs, ys, zs,      0, 0, 0,    0.25 + m, 0.75 - m),
-			vertex(xe, ys, zs,      0, 0, 0,    0.50 - m, 0.75 - m),
-			vertex(xe, ys, ze,      0, 1, 0,    0.50 - m, 0.50 + m),
+			vertex(xe, ys, zs,      0, 1, 0,    0.50 - m, 0.50 + m),
+			vertex(xs, ys, zs,      0, 0, 0,    0.25 + m, 0.50 + m),
+			vertex(xs, ys, ze,      0, 0, 0,    0.25 + m, 0.75 - m),
+			vertex(xs, ys, ze,      0, 0, 0,    0.25 + m, 0.75 - m),
+			vertex(xe, ys, ze,      0, 0, 0,    0.50 - m, 0.75 - m),
+			vertex(xe, ys, zs,      0, 1, 0,    0.50 - m, 0.50 + m),
 		}
 	}
 
@@ -189,20 +174,28 @@ local p_rz = 0
 local running = true
 local w, h
 
+local BLIT = true
+
 local function raster_setup()
-	term.setGraphicsMode(2)
-	w, h = term.getSize(2)
+	if BLIT then
+		w, h = term.getSize()
+	else
+		term.setGraphicsMode(2)
+		w, h = term.getSize(2)
+	end
 
 	print(w, ',', h)
 	-- for k,v in pairs(raster) do print(k, v) end
-	raster.set_size(w, h)
+	raster.set_size(w, h, BLIT)
 	raster.set_near(1)
 
-	for i=0,6*6*6 do
-		local r = (math.floor(i     ) % 6) / 6.0
-		local g = (math.floor(i /  6) % 6) / 6.0
-		local b = (math.floor(i / 36) % 6) / 6.0
-		term.setPaletteColor(i, r, g, b)
+	if not BLIT then
+		for i=0,6*6*6 do
+			local r = (math.floor(i     ) % 6) / 6.0
+			local g = (math.floor(i /  6) % 6) / 6.0
+			local b = (math.floor(i / 36) % 6) / 6.0
+			term.setPaletteColor(i, r, g, b)
+		end
 	end
 
 	-- for i=0,255 do term.setPaletteColor(i, i / 255.0, i / 255.0, i / 255.0) end
@@ -215,6 +208,12 @@ end
 
 
 local function draw_text(x, y, str, fg_color, bg_color)
+	if BLIT then
+		term.setCursorPos(math.floor(x / 11) + 1, math.floor(y / 9) + 1)
+		term.write(str)
+		return
+	end
+
 	local column = 0
 	local line = 0
 	for i=1,#str do
@@ -333,7 +332,19 @@ local function render_loop()
 		raster.set_face_culling(true)
 
 		term.setFrozen(true)
-		term.drawPixels(1, 1, raster.get_layer('color'))
+		if BLIT then
+			local blitBuffer = raster.get_blit('color')
+			for y, row in ipairs(blitBuffer) do
+				term.setCursorPos(1, y)
+				term.blit(
+					table.concat(row[1], ''),
+					table.concat(row[2], ''),
+					table.concat(row[3], '')
+				)
+			end
+		else
+			term.drawPixels(1, 1, raster.get_layer('color'))
+		end
 		local info = raster.get_raster_info()
 
 		draw_text(0,  0, "fps      : " .. fps, 215, 0)

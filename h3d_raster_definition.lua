@@ -1,4 +1,4 @@
-error('You cannot include this file')
+error('You cannot include this file') --$$REMOVE
 
 --- @class H3DRaster
 local raster = {}
@@ -59,7 +59,6 @@ end
 --- @param texture any a texture object
 --- @return H3DRaster raster
 function raster.set_texture(texture)
-	TEXTURE = texture
 	return raster
 end
 

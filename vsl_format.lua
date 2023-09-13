@@ -123,6 +123,15 @@ local function token_list(tokens)
 	return M
 end
 
+--- @class VSLOutput
+--- @field used_layers table A table that contains which layers were used
+-- @field used_textures table (EXPERIMENTAL)
+--- @field used_vertex_attributes table A table that contains which vertex attribute components were used
+--- @field used_face_attributes table A table that contains which face attribute components were used
+--- @field uses_barycentric boolean If the shader needs barycentric coordinates
+--- @field frag_shader string? The shader code
+
+
 --- @class VSLContext
 --- @field vertex_attributes H3DAttribute[] An array of vertex attributes
 --- @field face_attributes H3DAttribute[] An array of face attributes
@@ -136,7 +145,7 @@ end
 ---
 --- @param source string the vsl shader code
 --- @param context VSLContext a table with data
---- @return table a table containing the output
+--- @return VSLOutput output a table containing the processed shader
 function vsl_format.process(source, context)
 	local function _get(pattern)
 		return function(text)
@@ -162,6 +171,15 @@ function vsl_format.process(source, context)
 	local tokens = tokenize(source, patterns)
 
 	--[[
+	local function quote(text)
+		return '\'' .. text:gsub('[\\\'\"\n\t]', {
+			['\\'] = '\\\\',
+			['\''] = '\\\'',
+			['\"'] = '\\\"',
+			['\n'] = '\\n',
+			['\t'] = '\\t'
+		}) .. '\''
+	end
 	for _, v in pairs(tokens) do
 		print(string.format('(line: %3d, column: %3d) %-10s %s',
 			v.line,
@@ -180,6 +198,7 @@ function vsl_format.process(source, context)
 	local LAYERS             = context.layers
 	local DEBUG              = context.debug
 
+	--- @type VSLOutput
 	local output = {
 		-- A list of accessed layers
 		used_layers = {},
@@ -227,6 +246,7 @@ function vsl_format.process(source, context)
 		return nil
 	end
 
+	local suffix_list = { 'x', 'y', 'z', 'w'}
 	local ast = vsl_format.parse(token_list(tokens))
 	output.frag_shader = vsl_format.build_code(ast, {
 		variable = function(ast_error, name)
@@ -236,7 +256,7 @@ function vsl_format.process(source, context)
 					ast_error('No position attribute has been defined')
 				else
 					local lookup_value  = { gl_x = 1, gl_y = 2, gl_z = 4, gl_depth = 4 }
-					local lookup_suffix = { gl_x = 'x', gl_y = 'y', gl_z = 'z' }
+					local lookup_suffix = { gl_x = 'x', gl_y = 'y' }
 					local used = output.used_vertex_attributes[attribute.name] or 0
 					output.used_vertex_attributes[attribute.name] = bit32.bor(used, lookup_value[name])
 
@@ -301,7 +321,7 @@ function vsl_format.process(source, context)
 				local used = output.used_face_attributes[data] or 0
 				if attribute.count > 1 then
 					local idx = tonumber(args[2]) + 1
-					suffix = '_' .. (("xyzw"):sub(idx, idx))
+					suffix = '_' .. suffix_list[idx]
 					output.used_face_attributes[data] = bit32.bor(used, 2 ^ (idx - 1))
 				else
 					output.used_face_attributes[data] = bit32.bor(used, 1)
@@ -326,7 +346,7 @@ function vsl_format.process(source, context)
 				local used = output.used_vertex_attributes[data] or 0
 				if attribute.count > 1 then
 					local idx = tonumber(args[2]) + 1
-					suffix = '_' .. (("xyzw"):sub(idx, idx))
+					suffix = '_' .. suffix_list[idx]
 					output.used_vertex_attributes[data] = bit32.bor(used, 2 ^ (idx - 1))
 				else
 					output.used_face_attributes[data] = bit32.bor(used, 1)
@@ -382,7 +402,8 @@ function vsl_format.process(source, context)
 					'(_math_floor(_math_clamp({1} * 6, 0, 5.999))) + ' ..
 					'(_math_floor(_math_clamp({2} * 6, 0, 5.999)) * 6) + ' ..
 					'(_math_floor(_math_clamp({3} * 6, 0, 5.999)) * 36)'
-				):gsub('{1}', args[1]):gsub('{2}', args[2]):gsub('{3}', args[3])
+				)
+				result = result:gsub('{1}', args[1]):gsub('{2}', args[2]):gsub('{3}', args[3])
 				return nil, result
 			end,
 
@@ -417,8 +438,8 @@ function vsl_format.process(source, context)
 				if name:match('^__va') then
 					has_bary = true
 					if #name > 4 then
-						table.insert(lines, 'local ' .. name:sub(3) .. ' = depth * ' ..
-							('({t}1 + in_{t}2 * l_a + in_{t}3 * l_b)'):gsub('{t}', name:sub(3)))
+						local value = 'local ' .. name:sub(3) .. ' = depth * ' .. ('({t}1 + in_{t}2 * l_a + in_{t}3 * l_b)')
+						table.insert(lines, value:gsub('{t}', name:sub(3)))
 					end
 				end
 			end
@@ -804,4 +825,4 @@ function vsl_format.parse(reader)
 	return result
 end
 
-return vsl_format
+return vsl_format --$$REMOVE

@@ -1,15 +1,10 @@
---[[
-	Copyright HaruCoded (c) 2023
-
-	This file cannot be directly imported and require pre processing with the
-	'h3d_format' file
-]]
-
 {% if false then %}
 --- @class H3DRasterInternal
 local raster = {}
 {% else %}
 local raster = {}
+-- Blitable table used to cache return
+local blit_buffer = {}
 {% end %}
 
 -- Globals
@@ -356,7 +351,8 @@ local function renderTriangleInternal(
 	local y_d1 = y_min - y_mid
 
 	-- y_d0 = y_mid - y_max
-	if y_d0 > 0 then -- TOP TRIANGLE, FLAT BOTTOM
+	-- TOP TRIANGLE, FLAT BOTTOM
+	if y_d0 > 0 then
 		local x13_s = (x_sta - x_max) / y_d0
 		local x23_s = (x_end - x_max) / y_d0
 		local dy0 = _math_ceil(y_max - 0.5)
@@ -398,7 +394,8 @@ local function renderTriangleInternal(
 	end
 
 	-- y_d1 = y_min - y_mid
-	if y_d1 > 0 then -- BOTTOM TRIANGLE, FLAT TOP
+	-- BOTTOM TRIANGLE, FLAT TOP
+	if y_d1 > 0 then
 		local x13_s = (x_min - x_sta) / y_d1
 		local x23_s = (x_min - x_end) / y_d1
 		local dy0 = _math_ceil(y_mid - 0.5)
@@ -448,18 +445,6 @@ textindent(if_sorted({ 'sy1', 'sy2', 'sy3' }, function(state)
 		'if x_sta > x_end then',
 		'	x_sta, x_end = x_end, x_sta',
 		'end',
-		--[[textindent(
-			{#full_function#}
-				:gsub('y_min', 'sy{1}')
-				:gsub('y_mid', 'sy{2}')
-				:gsub('y_max', 'sy{3}')
-
-				:gsub('x_min', 'sx{1}')
-				:gsub('x_mid', 'sx{2}')
-				:gsub('x_max', 'sx{3}')
-
-				-- TODO do for all vertex attributes
-		, 0),]]
 		'renderTriangleInternal(',
 		'	sy{1}, sy{2}, sy{3},',
 		'	sx{1}, sx{2}, sx{3},',
@@ -471,7 +456,8 @@ textindent(if_sorted({ 'sy1', 'sy2', 'sy3' }, function(state)
 	out = out:gsub('{1}', tostring(state[1]))
 			 :gsub('{2}', tostring(state[2]))
 			 :gsub('{3}', tostring(state[3]))
-	return '-- {' .. res .. '}\n' .. out
+	out = '-- {' .. res .. '}\n' .. out
+	return out
 end), 1)
 !}
 end
@@ -697,19 +683,23 @@ end
 --- Update the dimensions of the raster
 --- @param width integer the width of the buffer
 --- @param height integer the height of the buffer
+--- @param blit boolean? if buffers should be blit
 --- @return H3DRasterInternal raster
-function raster.set_size(width, height)
-	W = width
-	H = height
+function raster.set_size(width, height, blit)
+	if blit == nil then
+		blit = true
+	end
+	W = width * (blit and 2 or 1)
+	H = height * (blit and 3 or 1)
 
 	-- Resize 
-	for y=1,height do
+	for y=1,H do
 {%
 		for _, name in pairs(LAYERS) do
 			@insert('\t\tlayer_' .. name .. '[y] = {}\n')
 		end
 %}
-		for x=1,width do
+		for x=1,W do
 {%
 			for _, name in pairs(LAYERS) do
 				@insert('\t\t\tlayer_' .. name .. '[y][x] = 0\n')
@@ -742,6 +732,117 @@ end
 function raster.set_texture(texture)
 	TEXTURE = texture
 	return raster
+end
+
+local texel_bits = {}
+local texel_char = {}
+
+local ic = 0
+for i=0,63 do
+	local a = i
+	local b = bit32.band(bit32.bnot(i), 63)
+	if texel_bits[a] == nil and texel_bits[b] == nil then
+		texel_bits[a] = ic
+		texel_bits[b] = -ic
+		texel_char[ic] = string.char(128 + ic)
+		ic = ic + 1
+	end
+end
+
+local EMPTY_TABLE = {}
+local function calculateTexelWithColor(x, y, layer)
+	local y1 = layer[y    ] or EMPTY_TABLE
+	local y2 = layer[y + 1] or EMPTY_TABLE
+	local y3 = layer[y + 2] or EMPTY_TABLE
+
+	local p1 = y1[x    ] or 0
+	local p2 = y1[x + 1] or 0
+	local p3 = y2[x    ] or 0
+	local p4 = y2[x + 1] or 0
+	local p5 = y3[x    ] or 0
+	local p6 = y3[x + 1] or 0
+
+	local freq = {}
+	freq[p1] = 1
+	freq[p2] = (freq[p2] or 0) + 1
+	freq[p3] = (freq[p3] or 0) + 1
+	freq[p4] = (freq[p4] or 0) + 1
+	freq[p5] = (freq[p5] or 0) + 1
+	freq[p6] = (freq[p6] or 0) + 1
+
+	local A, A_C = p1, 0
+	local B, B_C = p1, 0
+	for color, count in pairs(freq) do
+		if count > B_C then
+			if count > A_C then
+				B = A
+				B_C = A_C
+				A = color
+				A_C = count
+			else
+				B = color
+				B_C = count
+			end
+		end
+	end
+
+	if A == B then
+		return A, A, ' '
+	end
+
+	local mask = 0
+	if p1 == A then mask = mask +  1 end
+	if p2 == A then mask = mask +  2 end
+	if p3 == A then mask = mask +  4 end
+	if p4 == A then mask = mask +  8 end
+	if p5 == A then mask = mask + 16 end
+	if p6 == A then mask = mask + 32 end
+
+	local v = texel_bits[mask]
+	if v < 0 then
+		return B, A, texel_char[-v]
+	else
+		return A, B, texel_char[v]
+	end
+end
+
+--- Return the current data as a CC blitable image
+--- @param layer string the layer you want to write
+--- @return table blit_table
+function raster.get_blit(layer)
+	layer = layers[layer]
+	local colors = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' }
+	for y=1,H do
+		-- Only allocate once
+		local prev = blit_buffer[y]
+		if prev == nil then
+			prev = { {}, {}, {} }
+			blit_buffer[y] = prev
+		end
+		local row = prev[1]
+		local fg = prev[2]
+		local bg = prev[3]
+
+		for i=W+1,#row do
+			row[i] = nil
+			fg[i] = nil
+			bg[i] = nil
+		end
+
+		for x=1,W do
+			local t_fg, t_bg, t_cc = calculateTexelWithColor(x * 2 - 1, y * 3 - 2, layer)
+			t_bg = ((16 + (t_bg % 16)) % 16) + 1
+			t_fg = ((16 + (t_fg % 16)) % 16) + 1
+			
+			row[x] = t_cc
+			fg[x] = colors[t_fg]
+			bg[x] = colors[t_bg]
+		end
+	end
+	for i=H+1,#blit_buffer do
+		blit_buffer[i] = nil
+	end
+	return blit_buffer
 end
 
 function raster.get_raster_info()

@@ -1,9 +1,7 @@
--- 4x3 matrix
-
 --- @class H3DMatrix
 local h3d_matrix = {}
 
---- Construct a new matrix
+--- Construct a new 4x3 matrix
 --- @return H3DMatrix
 function h3d_matrix:new()
 	local o = {}
@@ -253,4 +251,4 @@ function h3d_matrix:transfer(x, y, z)
 	return nx, ny, nz
 end
 
-return h3d_matrix
+return h3d_matrix --$$REMOVE
