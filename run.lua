@@ -176,6 +176,12 @@ local w, h
 
 local BLIT = true
 
+p_y = 2
+p_x = -2
+p_z = 1
+p_ry = -34
+p_rx = -10
+
 local function raster_setup()
 	if BLIT then
 		w, h = term.getSize()
