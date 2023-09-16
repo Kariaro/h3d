@@ -43,8 +43,7 @@ local function tokenize(source, patterns)
 		end
 
 		local content = source:sub(1, count)
-
-		if group ~= nil then
+		if group ~= false then
 			result[#result + 1] = {
 				type = group,
 				value = content,
@@ -158,8 +157,8 @@ function vsl_format.process(source, context)
 	end
 
 	local patterns = {
-		{ nil,    _get('%-%-[^\n]+') },
-		{ nil,    _get('[ \t\r\n]+') },
+		{ false,  _get('%-%-[^\n]+') },
+		{ false,  _get('[ 	\r\n]+') },
 		{ 'str',  _get("'[^\n]-'") },
 		{ 'num',  _get("[0-9]+%.[0-9]+"), _get("[0-9]+") },
 		{ 'op',   '==', '>=', '<=', '~=', '%', '<', '>', '*', '-', '+', '/', '(', ')', '=', '.', ',' },
@@ -439,12 +438,17 @@ function vsl_format.process(source, context)
 					has_bary = true
 					if #name > 4 then
 						local value = 'local ' .. name:sub(3) .. ' = depth * ' .. ('({t}1 + in_{t}2 * l_a + in_{t}3 * l_b)')
-						table.insert(lines, value:gsub('{t}', name:sub(3)))
+						value = value:gsub('{t}', name:sub(3))
+						table.insert(lines, value)
 					end
 				end
 			end
 
 			output.uses_barycentric = has_bary
+			if has_bary then
+				local used = output.used_vertex_attributes[POSITION_ATTRIBUTE.name] or 0
+				output.used_vertex_attributes[POSITION_ATTRIBUTE.name] = bit32.bor(used, 4)
+			end
 			return table.concat(lines, '\n')
 		end
 	})

@@ -1,2 +1,3 @@
 code_pre*.lua
 code_gen*.lua
+build/*

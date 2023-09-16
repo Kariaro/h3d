@@ -73,71 +73,76 @@ local function draw_cube(x, y, z, gr, matrix)
 
 	local m = 0
 	local groups = {
-		front = {
-			vertex(xs, ys, zs,      1, 0, 0,    0.25 + m, 0.50 - m),
-			vertex(xe, ys, zs,      1, 1, 1,    0.50 - m, 0.50 - m),
-			vertex(xs, ye, zs,      0, 0, 0,    0.25 + m, 0.25 + m),
-			vertex(xe, ye, zs,      0, 1, 0,    0.50 - m, 0.25 + m),
-			vertex(xs, ye, zs,      0, 0, 0,    0.25 + m, 0.25 + m),
-			vertex(xe, ys, zs,      1, 1, 1,    0.50 - m, 0.50 - m),
-		},
-		left = {
+		{ 'left', {
 			vertex(xs, ys, ze,      1, 1, 0,    0.00 + m, 0.50 - m),
 			vertex(xs, ys, zs,      1, 0, 1,    0.25 - m, 0.50 - m),
 			vertex(xs, ye, ze,      0, 1, 1,    0.00 + m, 0.25 + m),
 			vertex(xs, ye, zs,      0, 0, 0,    0.25 - m, 0.25 + m),
 			vertex(xs, ye, ze,      0, 0, 0,    0.00 + m, 0.25 + m),
 			vertex(xs, ys, zs,      1, 0, 0,    0.25 - m, 0.50 - m),
-		},
-		right = {
+		}},
+		{ 'right', {
 			vertex(xe, ys, zs,      1, 1, 1,    0.50 + m, 0.50 - m),
 			vertex(xe, ys, ze,      0, 0, 1,    0.75 - m, 0.50 - m),
 			vertex(xe, ye, zs,      0, 1, 0,    0.50 + m, 0.25 + m),
 			vertex(xe, ye, ze,      0, 0, 0,    0.75 - m, 0.25 + m),
 			vertex(xe, ye, zs,      0, 1, 0,    0.50 + m, 0.25 + m),
 			vertex(xe, ys, ze,      0, 0, 1,    0.75 - m, 0.50 - m),
-		},
-		back = {
-			vertex(xe, ys, ze,      0, 0, 1,    0.75 + m, 0.50 - m),
-			vertex(xs, ys, ze,      0, 0, 0,    1.00 - m, 0.50 - m),
-			vertex(xe, ye, ze,      0, 0, 0,    0.75 + m, 0.25 + m),
-			vertex(xs, ye, ze,      1, 0, 0,    1.00 - m, 0.25 + m),
-			vertex(xe, ye, ze,      0, 1, 0,    0.75 + m, 0.25 + m),
-			vertex(xs, ys, ze,      0, 0, 1,    1.00 - m, 0.50 - m),
-		},
-		top = {
+		}},
+		{ 'top', {
 			vertex(xe, ye, ze,      0, 0, 1,    0.50 - m, 0.00 + m),
 			vertex(xs, ye, ze,      0, 0, 0,    0.25 + m, 0.00 + m),
 			vertex(xs, ye, zs,      1, 0, 0,    0.25 + m, 0.25 - m),
 			vertex(xs, ye, zs,      1, 0, 0,    0.25 + m, 0.25 - m),
 			vertex(xe, ye, zs,      1, 1, 1,    0.50 - m, 0.25 - m),
 			vertex(xe, ye, ze,      0, 0, 1,    0.50 - m, 0.00 + m),
-		},
-		bottom = {
+		}},
+		{ 'back', {
+			vertex(xe, ys, ze,      0, 0, 1,    0.75 + m, 0.50 - m),
+			vertex(xs, ys, ze,      0, 0, 0,    1.00 - m, 0.50 - m),
+			vertex(xe, ye, ze,      0, 0, 0,    0.75 + m, 0.25 + m),
+			vertex(xs, ye, ze,      1, 0, 0,    1.00 - m, 0.25 + m),
+			vertex(xe, ye, ze,      0, 1, 0,    0.75 + m, 0.25 + m),
+			vertex(xs, ys, ze,      0, 0, 1,    1.00 - m, 0.50 - m),
+		}},
+		{ 'front', {
+			vertex(xs, ys, zs,      1, 0, 0,    0.25 + m, 0.50 - m),
+			vertex(xe, ys, zs,      1, 1, 1,    0.50 - m, 0.50 - m),
+			vertex(xs, ye, zs,      0, 0, 0,    0.25 + m, 0.25 + m),
+			vertex(xe, ye, zs,      0, 1, 0,    0.50 - m, 0.25 + m),
+			vertex(xs, ye, zs,      0, 0, 0,    0.25 + m, 0.25 + m),
+			vertex(xe, ys, zs,      1, 1, 1,    0.50 - m, 0.50 - m),
+		}},
+		{ 'bottom', {
 			vertex(xe, ys, zs,      0, 1, 0,    0.50 - m, 0.50 + m),
 			vertex(xs, ys, zs,      0, 0, 0,    0.25 + m, 0.50 + m),
 			vertex(xs, ys, ze,      0, 0, 0,    0.25 + m, 0.75 - m),
 			vertex(xs, ys, ze,      0, 0, 0,    0.25 + m, 0.75 - m),
 			vertex(xe, ys, ze,      0, 0, 0,    0.50 - m, 0.75 - m),
 			vertex(xe, ys, zs,      0, 1, 0,    0.50 - m, 0.50 + m),
-		}
+		}},
 	}
 
 	local vertices = {}
 	if gr == nil then
-		for i, v in pairs(groups) do
-			for _, vv in pairs(v) do
+		for _, v in pairs(groups) do
+			for _, vv in pairs(v[2]) do
 				vertices[#vertices + 1] = vv
 			end
 		end
 	else
-		for _, name in pairs(gr) do
-			for _, vv in pairs(groups[name]) do
-				local cc = {}
-				for aa,bb in pairs(vv) do
-					cc[aa] = bb
+		for _, v in pairs(groups) do
+			local exist = false
+			for _, name in pairs(gr) do
+				if name == v[1] then
+					exist = true
+					break
 				end
-				vertices[#vertices + 1] = cc
+			end
+			if exist then
+				for _, vv in pairs(v[2]) do
+					vertices[#vertices + 1] = vv
+				end
 			end
 		end
 	end
@@ -208,6 +213,7 @@ local function raster_setup()
 end
 
 local function raster_clear()
+	raster.clear_text()
 	raster.set_layer('depth', 10000)
 	raster.set_layer('color', 1 + 6 + 36) -- 215
 end
@@ -215,8 +221,7 @@ end
 
 local function draw_text(x, y, str, fg_color, bg_color)
 	if BLIT then
-		term.setCursorPos(math.floor(x / 11) + 1, math.floor(y / 9) + 1)
-		term.write(str)
+		raster.writeText(math.floor(x / 11) + 1, math.floor(y / 9) + 1, str) -- fg_color, bg_color)
 		return
 	end
 
@@ -338,7 +343,13 @@ local function render_loop()
 		raster.set_face_culling(true)
 
 		term.setFrozen(true)
+		local info = raster.get_raster_info()
+
 		if BLIT then
+			draw_text(0,  0, "fps      : " .. fps, 215, 0)
+			draw_text(0,  9, "pixels   : " .. info.fragment.color, 215, 0)
+			draw_text(0, 18, "triangles: " .. info.triangles, 215, 0)
+
 			local blitBuffer = raster.get_blit('color')
 			for y, row in ipairs(blitBuffer) do
 				term.setCursorPos(1, y)
@@ -350,12 +361,11 @@ local function render_loop()
 			end
 		else
 			term.drawPixels(1, 1, raster.get_layer('color'))
-		end
-		local info = raster.get_raster_info()
 
-		draw_text(0,  0, "fps      : " .. fps, 215, 0)
-		draw_text(0,  9, "pixels   : " .. info.fragment.color, 215, 0)
-		draw_text(0, 18, "triangles: " .. info.triangles, 215, 0)
+			draw_text(0,  0, "fps      : " .. fps, 215, 0)
+			draw_text(0,  9, "pixels   : " .. info.fragment.color, 215, 0)
+			draw_text(0, 18, "triangles: " .. info.triangles, 215, 0)
+		end
 
 		--[[
 		local str = ""

@@ -1,7 +1,6 @@
 local h3d_format = {}
 
--- TODO: Create a system that gives accurate line / column errors for 'code_pre' and 'code_gen'
-
+--$$START_REMOVE
 --- Construct the pre template code from a source text
 --- @param source string the input source
 --- @return string template the template string
@@ -68,6 +67,7 @@ function h3d_format.pre_template(source)
 	source = table.concat(lines, '\n')
 	return source
 end
+--$$END_REMOVE
 
 --- Format an input source code
 ---
@@ -85,7 +85,6 @@ function h3d_format.process(source, environment, callback)
 	local env = {}
 	env._G = env
 	env._VERSION = _VERSION
-	env.bit32 = bit32
 	env.assert = assert
 	env.error = error
 	env.getmetatable = getmetatable
@@ -93,18 +92,13 @@ function h3d_format.process(source, environment, callback)
 	env.load = load
 	env.next = next
 	env.pairs = pairs
-	env.pcall = pcall
 	env.print = print
-	env.rawequal = rawequal
-	env.rawget = rawget
-	env.rawlen = rawlen
-	env.rawset = rawset
 	env.select = select
 	env.setmetatable = setmetatable
 	env.tonumber = tonumber
 	env.tostring = tostring
 	env.type = type
-	env.xpcall = xpcall
+	env.bit32 = bit32
 	env.math = math
 	env.string = string
 	env.table = table
@@ -130,19 +124,20 @@ function h3d_format.process(source, environment, callback)
 	end
 
 	local code, err = load(result, 'generated', 't')
-	if code then
-		xpcall(code, function(...)
-			print('Failed to run generated code')
-			print(debug.traceback())
-			print()
-			print('error:')
-			local a = ...
-			print('  ' .. a)
-		end)
-	else
-		print('Failed to load generated code: ' .. err)
+	if not code then
+		error('Failed to load generated code: ' .. err)
 	end
-	return code()
+
+	local status, result = xpcall(code, function(...)
+		print('Failed to run generated code')
+		print(debug.traceback())
+		print()
+		print('error:')
+		local a = ...
+		print('  ' .. a)
+	end)
+
+	return result
 --- @diagnostic enable
 end
 

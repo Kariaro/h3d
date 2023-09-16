@@ -9,6 +9,10 @@ local blit_buffer = {}
 
 -- Globals
 {%
+table.insert(LAYERS, 'text_cc')
+table.insert(LAYERS, 'text_fg')
+table.insert(LAYERS, 'text_bg')
+
 for _, name in pairs(LAYERS) do
 	@insert('local layer_' .. name .. ' = {}\n')
 	@insert('local layer_' .. name .. '_write = 0\n')
@@ -28,17 +32,11 @@ local H = 1
 local W = 1
 local TEXTURE = nil
 local MISSING_TEXTURE = {
-	w = 8,
-	h = 8,
+	w = 2,
+	h = 2,
 	data = {
-		0, 185, 0, 185, 0, 185, 0, 185,
-		185, 0, 185, 0, 185, 0, 185, 0,
-		0, 185, 0, 185, 0, 185, 0, 185,
-		185, 0, 185, 0, 185, 0, 185, 0,
-		0, 185, 0, 185, 0, 185, 0, 185,
-		185, 0, 185, 0, 185, 0, 185, 0,
-		0, 185, 0, 185, 0, 185, 0, 185,
-		185, 0, 185, 0, 185, 0, 185, 0,
+		0, 185,
+		185, 0,
 	}
 }
 local NEAR = 0.01
@@ -659,6 +657,9 @@ end
 --- @param value number the value to fill with
 --- @return H3DRasterInternal raster
 function raster.set_layer(name, value)
+	assert(type(name) == 'string')
+	assert(type(value) == 'number')
+	
 	local layer = layers[name]
 	if layer == nil then
 		return raster
@@ -723,6 +724,37 @@ function raster.set_size(width, height, blit)
 	return raster
 end
 
+function raster.clear_text()
+	raster.set_layer('text_cc', 0)
+end
+
+--- Write text to the screen
+--- @param x number the x coordinate
+--- @param y number the y coordinate
+--- @param text string the text to draw
+--- @param fg integer? the foreground color
+--- @param bg integer? the background color
+--- @return H3DRasterInternal raster
+function raster.writeText(x, y, text, fg, bg)
+	if fg == nil then fg = 0 end
+	if bg == nil then bg = 15 end
+
+	if y < 1 or y > H then
+		return raster
+	end
+
+	for xx=1,#text do
+		local xxs = xx + x - 1
+		if xxs > 0 and xxs < W then
+			layer_text_cc[y][xxs] = text:sub(xx,xx)
+			layer_text_fg[y][xxs] = fg
+			layer_text_bg[y][xxs] = bg
+		end
+	end
+
+	return raster
+end
+
 --- Set the near plane of the raster
 --- @param near number the near clipping value
 --- @return H3DRasterInternal raster
@@ -740,26 +772,11 @@ function raster.set_face_culling(enable)
 end
 
 --- Change the currently loaded texture
---- @param texture any a texture object
+--- @param texture H3DTexture a texture object
 --- @return H3DRasterInternal raster
 function raster.set_texture(texture)
 	TEXTURE = texture
 	return raster
-end
-
-local texel_bits = {}
-local texel_char = {}
-
-local ic = 0
-for i=0,63 do
-	local a = i
-	local b = bit32.band(bit32.bnot(i), 63)
-	if texel_bits[a] == nil and texel_bits[b] == nil then
-		texel_bits[a] = ic
-		texel_bits[b] = -ic
-		texel_char[ic] = string.char(128 + ic)
-		ic = ic + 1
-	end
 end
 
 -- Create teletext lookup table
@@ -799,7 +816,7 @@ for i=0,46656 do
 		freq[p4] = (freq[p4] or 0) + 1
 		freq[p5] = (freq[p5] or 0) + 1
 		freq[p6] = (freq[p6] or 0) + 1
-		
+
 		-- Calculate the most frequent color
 		local A, A_C = p1, 0
 		local B, B_C = p1, 0
@@ -828,20 +845,22 @@ for i=0,46656 do
 		A = lookup[A] + 1
 		B = lookup[B] + 1
 
-		local v = texel_bits[mask]
-		if v >= 0 then
-			teletext_lookup_c1[id] = A
-			teletext_lookup_c2[id] = B
-			teletext_lookup_c3[id] = texel_char[v]
-		else
+		local mask_f = bit32.bxor(mask, 63)
+		if mask > mask_f then
 			teletext_lookup_c1[id] = B
 			teletext_lookup_c2[id] = A
-			teletext_lookup_c3[id] = texel_char[-v]
+			teletext_lookup_c3[id] = string.char(128 + mask_f)
+		else
+			teletext_lookup_c1[id] = A
+			teletext_lookup_c2[id] = B
+			teletext_lookup_c3[id] = string.char(128 + mask)
 		end
 	end
 end
 
+local table_gen = { 1, 2, 3, 4, 5 }
 local EMPTY_TABLE = {}
+local lookup = {}
 local teletext_part = { 0, 0, 0, 0, 0, 0 }
 local function calculateTeletextWithColor(x, y, layer)
 	local y1 = layer[y    ] or EMPTY_TABLE
@@ -862,7 +881,6 @@ local function calculateTeletextWithColor(x, y, layer)
 	teletext_part[5] = p5
 	teletext_part[6] = p6
 
-	local lookup = {}
 	lookup[p6] = 5
 	lookup[p5] = 4
 	lookup[p4] = 3
@@ -876,6 +894,13 @@ local function calculateTeletextWithColor(x, y, layer)
 		lookup[p4] * 4 +
 		lookup[p5] * 20 +
 		lookup[p6] * 100
+
+	lookup[p1] = nil
+	lookup[p2] = nil
+	lookup[p3] = nil
+	lookup[p4] = nil
+	lookup[p5] = nil
+	lookup[p6] = nil
 
 	local fg = teletext_lookup_c1[id]
 	local bg = teletext_lookup_c2[id]
@@ -906,14 +931,23 @@ function raster.get_blit(layer)
 			bg[i] = nil
 		end
 
+		local text_cc_row = layer_text_cc[y]
+		local text_fg_row = layer_text_fg[y]
+		local text_bg_row = layer_text_bg[y]
+
 		for x=1,W do
-			local t_fg, t_bg, t_cc = calculateTeletextWithColor(x * 2 - 1, y * 3 - 2, layer)
+			local t_fg, t_bg, t_cc
+			local text = text_cc_row[x]
+			if text ~= 0 then
+				t_fg, t_bg, t_cc = text_fg_row[x], text_bg_row[x], text
+			else
+				t_fg, t_bg, t_cc = calculateTeletextWithColor(x * 2 - 1, y * 3 - 2, layer)
+			end
 			t_bg = ((16 + (t_bg % 16)) % 16) + 1
 			t_fg = ((16 + (t_fg % 16)) % 16) + 1
-			
-			row[x] = t_cc
 			fg[x] = colors[t_fg]
 			bg[x] = colors[t_bg]
+			row[x] = t_cc
 		end
 	end
 	for i=H+1,#blit_buffer do

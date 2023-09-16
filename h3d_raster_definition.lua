@@ -3,6 +3,23 @@ error('You cannot include this file') --$$REMOVE
 --- @class H3DRaster
 local raster = {}
 
+--- @class H3DTexture
+--- @field w number width of the texture
+--- @field h number height of the texture
+--- @field data number[] data of the texture
+
+
+--- Write text to the screen
+--- @param x number the x coordinate
+--- @param y number the y coordinate
+--- @param text string the text to draw
+--- @param fg integer? the foreground color
+--- @param bg integer? the background color
+--- @return H3DRaster raster
+function raster.writeText(x, y, text, fg, bg)
+	return raster
+end
+
 
 --- Draw geometry with the raster
 --- @param geometry number[] the geometry buffer 
@@ -56,7 +73,7 @@ end
 
 
 --- Change the currently loaded texture
---- @param texture any a texture object
+--- @param texture H3DTexture a texture object
 --- @return H3DRaster raster
 function raster.set_texture(texture)
 	return raster
